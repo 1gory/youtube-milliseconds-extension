@@ -9,7 +9,7 @@ Chrome extension that adds millisecond precision to YouTube video timestamps.
 - Minimal performance impact
 
 ## Installation
-Available in Chrome Web Store: [ссылка будет позже]
+Available in Chrome Web Store: [link will be later]..
 
 ## Privacy
 This extension only runs on YouTube pages and does not collect any user data.

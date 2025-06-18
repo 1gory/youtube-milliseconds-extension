@@ -11,6 +11,6 @@ This extension does not collect, store, or transmit any personal data or user in
 All time calculations and display modifications happen locally in your browser. No data is sent to external servers.
 
 ## Contact
-For questions about this privacy policy, please contact: [your-email@example.com]
+For questions about this privacy policy, please contact: [igor.pershin.me@gmail.com]
 
-Last updated: [Current Date]
+Last updated: 18/06/2025
