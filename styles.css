@@ -1,0 +1,16 @@
+/* Styles for millisecond time display */
+.ytp-time-milliseconds {
+    font-family: 'Roboto Mono', monospace !important;
+    font-weight: 400 !important;
+    letter-spacing: 0.5px !important;
+}
+
+/* Increase time container width to accommodate milliseconds */
+.ytp-time-display {
+    min-width: 120px !important;
+}
+
+/* Additional styles for better readability */
+.ytp-time-current, .ytp-time-duration {
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7) !important;
+}

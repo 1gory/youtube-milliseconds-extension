@@ -1,0 +1,5 @@
+Privacy Policy for YouTube Milliseconds Timer
+
+This extension does not collect, store, or transmit any personal data.
+All processing happens locally in your browser.
+No analytics or tracking are implemented.
