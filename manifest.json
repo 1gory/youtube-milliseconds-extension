@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "YouTube Milliseconds Timer",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Adds millisecond precision to YouTube video timestamps for enhanced timing control",
   "content_scripts": [
     {

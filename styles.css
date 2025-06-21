@@ -3,11 +3,14 @@
     font-family: 'Roboto Mono', monospace !important;
     font-weight: 400 !important;
     letter-spacing: 0.5px !important;
+    display: inline-block !important;
+    width: 70px !important;
+    text-align: left !important;
 }
 
 /* Increase time container width to accommodate milliseconds */
 .ytp-time-display {
-    min-width: 120px !important;
+    min-width: 150px !important;
 }
 
 /* Additional styles for better readability */
