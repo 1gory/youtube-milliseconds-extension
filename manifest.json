@@ -1,8 +1,11 @@
 {
   "manifest_version": 3,
   "name": "YouTube Milliseconds Timer",
-  "version": "1.0.2",
-  "description": "Adds millisecond precision to YouTube video timestamps for enhanced timing control",
+  "version": "1.2.0",
+  "description": "Adds millisecond precision to YouTube video timestamps and tracks viewing time",
+  "permissions": [
+    "storage"
+  ],
   "content_scripts": [
     {
       "matches": ["*://www.youtube.com/*", "*://youtube.com/*"],
@@ -11,19 +14,22 @@
       "run_at": "document_end"
     }
   ],
-  "icons": {
-    "16": "icon16.png",
-    "48": "icon48.png",
-    "128": "icon128.png"
+  "background": {
+    "service_worker": "background.js"
   },
   "action": {
-    "default_title": "YouTube Milliseconds Timer",
+    "default_popup": "popup.html",
+    "default_title": "YouTube Time Tracker",
     "default_icon": {
       "16": "icon16.png",
       "48": "icon48.png",
       "128": "icon128.png"
     }
   },
-  "author": "Igor Pershin",
-  "homepage_url": "https://github.com/1gory/youtube-milliseconds-extension"
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  "author": "Your Name"
 }
