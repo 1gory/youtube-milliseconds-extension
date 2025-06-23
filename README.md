@@ -2,6 +2,10 @@
 
 Chrome extension that adds millisecond precision to YouTube video timestamps and tracks your viewing time.
 
+## Screenshots
+![Extension Preview](screenshots/1.jpg)
+![Extension Preview](screenshots/2.jpg)
+
 ## Features
 - Shows time in MM:SS.mmm format with millisecond precision
 - Toggle milliseconds on/off via extension popup
