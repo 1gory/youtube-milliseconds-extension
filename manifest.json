@@ -9,27 +9,27 @@
   "content_scripts": [
     {
       "matches": ["*://www.youtube.com/*", "*://youtube.com/*"],
-      "js": ["content.js"],
+      "js": ["js/content.js"],
       "css": ["styles.css"],
       "run_at": "document_end"
     }
   ],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "js/background.js"
   },
   "action": {
     "default_popup": "popup.html",
     "default_title": "YouTube Time Tracker",
     "default_icon": {
-      "16": "icon16.png",
-      "48": "icon48.png",
-      "128": "icon128.png"
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
     }
   },
   "icons": {
-    "16": "icon16.png",
-    "48": "icon48.png",
-    "128": "icon128.png"
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
   },
   "author": "Igor Pershin",
   "homepage_url": "https://github.com/1gory/youtube-milliseconds-extension"
