@@ -4,16 +4,54 @@
     font-weight: 400 !important;
     letter-spacing: 0.5px !important;
     display: inline-block !important;
-    width: 70px !important;
+    min-width: 70px !important;
+    width: auto !important;
     text-align: left !important;
 }
 
-/* Increase time container width to accommodate milliseconds */
+/* Increase time container width to accommodate milliseconds (including H:MM:SS.mmm) */
 .ytp-time-display {
-    min-width: 150px !important;
+    min-width: 175px !important;
 }
 
 /* Additional styles for better readability */
 .ytp-time-current, .ytp-time-duration {
     text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7) !important;
+}
+
+/* Copy timestamp button */
+.ytp-copy-time-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0 5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 255, 255, 0.75);
+    transition: color 0.15s, opacity 0.15s;
+    vertical-align: middle;
+    height: 100%;
+    outline: none;
+    flex-shrink: 0;
+}
+
+.ytp-copy-time-btn:hover {
+    color: #fff;
+}
+
+.ytp-copy-time-btn:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.5);
+    border-radius: 3px;
+}
+
+.ytp-copy-time-btn svg {
+    width: 13px;
+    height: 13px;
+    display: block;
+    pointer-events: none;
+}
+
+.ytp-copy-time-btn--copied {
+    color: #4ade80 !important;
 }

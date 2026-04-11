@@ -1,14 +1,19 @@
-# Permission Justification for YouTube Milliseconds Timer
+Permission Justification for YouTube Milliseconds Timer
 
-## activeTab Permission
-**Purpose**: Access the current YouTube tab to modify video player time display elements.
-**Usage**: The extension needs to read video element properties (currentTime, duration) and update DOM elements that show timestamps.
-**User Benefit**: Enables millisecond precision time display on YouTube videos.
+storage
+Purpose: Save user preferences and watch time statistics locally on the device.
+Usage: Stores the "show milliseconds" toggle setting and total YouTube watch time. No data leaves the device.
+User Benefit: Settings persist between browser sessions; watch time accumulates over time.
 
-## Host Permissions (youtube.com)
-**Purpose**: Run content scripts specifically on YouTube domains to enhance video player functionality.
-**Usage**: Inject JavaScript and CSS to modify time display format and update timestamps in real-time.
-**User Benefit**: Provides enhanced timing precision for better video control and analysis.
+clipboardWrite
+Purpose: Copy the current video timestamp to the clipboard when the user clicks the copy button.
+Usage: Called only in response to an explicit user click on the copy icon next to the timestamp. The extension never accesses the clipboard without user action.
+User Benefit: Lets users instantly capture an exact timestamp (e.g. 1:23:45.678) for notes, sharing, or video editing.
 
-## Remote Code Usage
-This extension does not use any remote code. All functionality is contained within the extension package.
+Host Permissions (youtube.com)
+Purpose: Run content scripts on YouTube to enhance the video player's time display.
+Usage: Injects JavaScript and CSS to show millisecond-precision timestamps and add the copy button to the player controls.
+User Benefit: Provides millisecond timing precision directly inside the YouTube player.
+
+Remote Code
+This extension does not use any remote code. All functionality is self-contained within the extension package.

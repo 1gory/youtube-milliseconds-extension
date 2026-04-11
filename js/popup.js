@@ -1,7 +1,5 @@
-let updateInterval;
-
-// Format time for display
-function formatTime(totalSeconds) {
+// Format total watch time for display (days, hours, minutes, seconds)
+function formatWatchTime(totalSeconds) {
   const years = Math.floor(totalSeconds / (365 * 24 * 3600));
   const days = Math.floor((totalSeconds % (365 * 24 * 3600)) / (24 * 3600));
   const hours = Math.floor((totalSeconds % (24 * 3600)) / 3600);
@@ -18,73 +16,85 @@ function formatTime(totalSeconds) {
   return parts.join(' ');
 }
 
-// Update total time display
-async function updateTotalTime() {
-  try {
-    const data = await chrome.storage.local.get(['totalWatchTime']);
-    const totalTime = data.totalWatchTime || 0;
-    document.getElementById('totalTime').textContent = formatTime(totalTime);
-  } catch (error) {
-    console.error('Error updating total time:', error);
-  }
-}
+// Only run DOM setup in browser/extension context
+if (typeof document !== 'undefined') {
 
-// Load and display statistics
-async function loadStats() {
-  try {
-    const data = await chrome.storage.local.get(['totalWatchTime', 'showMilliseconds']);
+  let updateInterval;
 
-    const totalTime = data.totalWatchTime || 0;
-    const showMilliseconds = data.showMilliseconds !== false;
-
-    document.getElementById('totalTime').textContent = formatTime(totalTime);
-    document.getElementById('showMilliseconds').checked = showMilliseconds;
-
-    // Update total time every second while popup is open
-    updateInterval = setInterval(updateTotalTime, 1000);
-
-  } catch (error) {
-    console.error('Error loading stats:', error);
-    document.getElementById('totalTime').textContent = 'Error loading data';
-  }
-}
-
-// Handle milliseconds checkbox change
-document.getElementById('showMilliseconds').addEventListener('change', async (e) => {
-  try {
-    const showMilliseconds = e.target.checked;
-    // Simply save to storage - content scripts will listen for storage changes
-    await chrome.storage.local.set({ showMilliseconds });
-
-  } catch (error) {
-    console.error('Error updating milliseconds setting:', error);
-  }
-});
-
-// Reset statistics
-document.getElementById('resetBtn').addEventListener('click', async () => {
-  if (confirm('Are you sure you want to reset all statistics?')) {
+  // Update total time display
+  async function updateTotalTime() {
     try {
-      const currentSettings = await chrome.storage.local.get(['showMilliseconds']);
-      await chrome.storage.local.clear();
-      await chrome.storage.local.set({
-        totalWatchTime: 0,
-        showMilliseconds: currentSettings.showMilliseconds !== false
-      });
-      location.reload();
+      const data = await chrome.storage.local.get(['totalWatchTime']);
+      const totalTime = data.totalWatchTime || 0;
+      document.getElementById('totalTime').textContent = formatWatchTime(totalTime);
     } catch (error) {
-      console.error('Error resetting stats:', error);
-      alert('Error resetting statistics. Please try again.');
+      console.error('Error updating total time:', error);
     }
   }
-});
 
-// Cleanup when popup closes
-window.addEventListener('beforeunload', () => {
-  if (updateInterval) {
-    clearInterval(updateInterval);
+  // Load and display statistics
+  async function loadStats() {
+    try {
+      const data = await chrome.storage.local.get(['totalWatchTime', 'showMilliseconds']);
+
+      const totalTime = data.totalWatchTime || 0;
+      const showMilliseconds = data.showMilliseconds !== false;
+
+      document.getElementById('totalTime').textContent = formatWatchTime(totalTime);
+      document.getElementById('showMilliseconds').checked = showMilliseconds;
+
+      // Update total time every second while popup is open
+      updateInterval = setInterval(updateTotalTime, 1000);
+
+    } catch (error) {
+      console.error('Error loading stats:', error);
+      document.getElementById('totalTime').textContent = 'Error loading data';
+    }
   }
-});
 
-// Initialize popup
-document.addEventListener('DOMContentLoaded', loadStats);
+  // Handle milliseconds checkbox change
+  document.getElementById('showMilliseconds').addEventListener('change', async (e) => {
+    try {
+      const showMilliseconds = e.target.checked;
+      // Simply save to storage - content scripts will listen for storage changes
+      await chrome.storage.local.set({ showMilliseconds });
+
+    } catch (error) {
+      console.error('Error updating milliseconds setting:', error);
+    }
+  });
+
+  // Reset statistics
+  document.getElementById('resetBtn').addEventListener('click', async () => {
+    if (confirm('Are you sure you want to reset all statistics?')) {
+      try {
+        const currentSettings = await chrome.storage.local.get(['showMilliseconds']);
+        await chrome.storage.local.clear();
+        await chrome.storage.local.set({
+          totalWatchTime: 0,
+          showMilliseconds: currentSettings.showMilliseconds !== false
+        });
+        location.reload();
+      } catch (error) {
+        console.error('Error resetting stats:', error);
+        alert('Error resetting statistics. Please try again.');
+      }
+    }
+  });
+
+  // Cleanup when popup closes
+  window.addEventListener('beforeunload', () => {
+    if (updateInterval) {
+      clearInterval(updateInterval);
+    }
+  });
+
+  // Initialize popup (script is at end of <body>, DOM is already ready)
+  loadStats();
+
+} // end browser-only block
+
+// Export for testing in Node.js environment
+if (typeof module !== 'undefined') {
+  module.exports = { formatWatchTime };
+}
