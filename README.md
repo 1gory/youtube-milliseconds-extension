@@ -16,7 +16,41 @@ Chrome extension that adds millisecond precision to YouTube video timestamps, an
 - No overlays, no clutter — integrates directly into the native player
 
 ## Installation
+
+### Chrome Web Store
 Available in Chrome Web Store: [YouTube Milliseconds Timer](https://chromewebstore.google.com/detail/youtube-milliseconds-time/bchlendkhiidadpakkfgnpeklmifffcp)
+
+### Manual installation (without Chrome Web Store)
+
+**English**
+
+1. Download this repository — click **Code → Download ZIP** on GitHub and unpack it, or run:
+   ```bash
+   git clone https://github.com/1gory/youtube-milliseconds-extension.git
+   ```
+2. Open Chrome and go to `chrome://extensions/`
+3. Enable **Developer mode** (toggle in the top-right corner)
+4. Click **Load unpacked** and select the folder you just downloaded
+5. The extension icon will appear in the toolbar — pin it for quick access
+6. Open any YouTube video and millisecond timestamps will appear immediately
+
+> Works in any Chromium-based browser: Chrome, Brave, Edge, Opera, Vivaldi.
+
+---
+
+**Русский**
+
+1. Скачайте этот репозиторий — нажмите **Code → Download ZIP** на GitHub и распакуйте архив, или выполните:
+   ```bash
+   git clone https://github.com/1gory/youtube-milliseconds-extension.git
+   ```
+2. Откройте Chrome и перейдите по адресу `chrome://extensions/`
+3. Включите **Режим разработчика** (переключатель в правом верхнем углу)
+4. Нажмите **Загрузить распакованное расширение** и выберите скачанную папку
+5. Иконка расширения появится на панели инструментов — закрепите её для удобного доступа
+6. Откройте любое видео на YouTube — миллисекунды появятся сразу
+
+> Работает в любом браузере на основе Chromium: Chrome, Brave, Edge, Opera, Vivaldi.
 
 ## Usage
 - **Timestamps**: Millisecond precision is shown automatically on all YouTube videos
