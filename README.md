@@ -78,4 +78,9 @@ zip -r youtube-milliseconds-v1.4.0.zip manifest.json popup.html popup.css styles
 The zip includes only the files required by the extension. Do **not** include `node_modules/`, `tests/`, screenshots, or any markdown files.
 
 ## Privacy
-This extension only runs on YouTube pages and does not collect any personal data. All viewing statistics are stored locally on your device and never transmitted externally.
+This extension does not collect any personal data. All statistics are stored locally on your device and never transmitted externally.
+
+Full privacy policy: https://1gory.github.io/youtube-milliseconds-extension/privacy-policy.html
+
+## License
+[MIT](LICENSE) © Igor Pershin
