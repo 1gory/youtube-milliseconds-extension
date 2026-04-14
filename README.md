@@ -24,15 +24,14 @@ Available in Chrome Web Store: [YouTube Milliseconds Timer](https://chromewebsto
 
 **English**
 
-1. Download this repository — click **Code → Download ZIP** on GitHub and unpack it, or run:
-   ```bash
-   git clone https://github.com/1gory/youtube-milliseconds-extension.git
-   ```
-2. Open Chrome and go to `chrome://extensions/`
-3. Enable **Developer mode** (toggle in the top-right corner)
-4. Click **Load unpacked** and select the folder you just downloaded
-5. The extension icon will appear in the toolbar — pin it for quick access
-6. Open any YouTube video and millisecond timestamps will appear immediately
+1. Go to the [Releases page](https://github.com/1gory/youtube-milliseconds-extension/releases) and download the latest `youtube-milliseconds-vX.X.X.zip`  
+   *(or on the main page click **Code → Download ZIP** and unpack it)*
+2. Unpack the ZIP — you will get a folder with the extension files
+3. Open Chrome and type `chrome://extensions/` in the address bar, press Enter
+4. Turn on **Developer mode** — the toggle is in the top-right corner of the page
+5. Click **Load unpacked** and select the unpacked folder
+6. The extension icon will appear in the toolbar. Pin it by clicking the puzzle icon → pin next to the extension name
+7. Open any YouTube video — millisecond timestamps will appear right away
 
 > Works in any Chromium-based browser: Chrome, Brave, Edge, Opera, Vivaldi.
 
@@ -40,15 +39,14 @@ Available in Chrome Web Store: [YouTube Milliseconds Timer](https://chromewebsto
 
 **Русский**
 
-1. Скачайте этот репозиторий — нажмите **Code → Download ZIP** на GitHub и распакуйте архив, или выполните:
-   ```bash
-   git clone https://github.com/1gory/youtube-milliseconds-extension.git
-   ```
-2. Откройте Chrome и перейдите по адресу `chrome://extensions/`
-3. Включите **Режим разработчика** (переключатель в правом верхнем углу)
-4. Нажмите **Загрузить распакованное расширение** и выберите скачанную папку
-5. Иконка расширения появится на панели инструментов — закрепите её для удобного доступа
-6. Откройте любое видео на YouTube — миллисекунды появятся сразу
+1. Перейдите на [страницу релизов](https://github.com/1gory/youtube-milliseconds-extension/releases) и скачайте последний файл `youtube-milliseconds-vX.X.X.zip`  
+   *(или на главной странице репозитория нажмите **Code → Download ZIP**)*
+2. Распакуйте ZIP-архив — появится папка с файлами расширения
+3. Откройте Chrome и введите в адресной строке `chrome://extensions/`, нажмите Enter
+4. Включите **Режим разработчика** — переключатель в правом верхнем углу страницы
+5. Нажмите **Загрузить распакованное расширение** и выберите распакованную папку
+6. Иконка расширения появится на панели инструментов. Закрепите её: нажмите иконку пазла → значок булавки рядом с названием расширения
+7. Откройте любое видео на YouTube — миллисекунды появятся сразу
 
 > Работает в любом браузере на основе Chromium: Chrome, Brave, Edge, Opera, Vivaldi.
 
