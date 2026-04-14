@@ -2,7 +2,7 @@
 
 Chrome extension that adds millisecond precision to YouTube video timestamps, an interval timer A→B, one-click copy, and a watch time stats dashboard.
 
-[<img src="https://storage.googleapis.com/web-dev-uploads/image/WlD8wC6g8khYWPJUsQceQkhXSlv1/UV4C4sCIILQ7HIeydxAm.png" alt="Available in the Chrome Web Store" height="58">](https://chromewebstore.google.com/detail/youtube-milliseconds-time/bchlendkhiidadpakkfgnpeklmifffcp)
+[<img src="https://raw.githubusercontent.com/1gory/youtube-milliseconds-extension/main/docs/chrome-webstore-badge.svg" alt="Available in the Chrome Web Store" height="58">](https://chromewebstore.google.com/detail/youtube-milliseconds-time/bchlendkhiidadpakkfgnpeklmifffcp)
 
 ## Screenshots
 <img src="screenshots/1.jpg" width="600" alt="Extension Preview">
@@ -20,7 +20,7 @@ Chrome extension that adds millisecond precision to YouTube video timestamps, an
 ## Installation
 
 ### Chrome Web Store
-[<img src="https://storage.googleapis.com/web-dev-uploads/image/WlD8wC6g8khYWPJUsQceQkhXSlv1/UV4C4sCIILQ7HIeydxAm.png" alt="Available in the Chrome Web Store" height="58">](https://chromewebstore.google.com/detail/youtube-milliseconds-time/bchlendkhiidadpakkfgnpeklmifffcp)
+[<img src="https://raw.githubusercontent.com/1gory/youtube-milliseconds-extension/main/docs/chrome-webstore-badge.svg" alt="Available in the Chrome Web Store" height="58">](https://chromewebstore.google.com/detail/youtube-milliseconds-time/bchlendkhiidadpakkfgnpeklmifffcp)
 
 ### Manual installation (without Chrome Web Store)
 

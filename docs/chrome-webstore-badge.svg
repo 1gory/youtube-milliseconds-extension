@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="248" height="58" viewBox="0 0 248 58">
+  <rect width="248" height="58" rx="4" fill="#fff" stroke="#e0e0e0" stroke-width="1.5"/>
+
+  <!-- Chrome icon -->
+  <g transform="translate(16, 11)">
+    <!-- Outer circle -->
+    <circle cx="18" cy="18" r="17" fill="none" stroke="#e8e8e8" stroke-width="1"/>
+    <!-- Red/green/yellow arc segments -->
+    <path d="M18 4 A14 14 0 0 1 30.12 11" stroke="#EA4335" stroke-width="5.5" fill="none" stroke-linecap="round"/>
+    <path d="M30.12 11 A14 14 0 0 1 30.12 25" stroke="#FBBC05" stroke-width="5.5" fill="none" stroke-linecap="round"/>
+    <path d="M30.12 25 A14 14 0 0 1 5.88 25" stroke="#34A853" stroke-width="5.5" fill="none" stroke-linecap="round"/>
+    <path d="M5.88 25 A14 14 0 0 1 5.88 11" stroke="#EA4335" stroke-width="5.5" fill="none" stroke-linecap="round"/>
+    <path d="M5.88 11 A14 14 0 0 1 18 4" stroke="#4285F4" stroke-width="5.5" fill="none" stroke-linecap="round"/>
+    <!-- Inner blue circle -->
+    <circle cx="18" cy="18" r="7" fill="#4285F4"/>
+    <circle cx="18" cy="18" r="5" fill="#fff"/>
+  </g>
+
+  <!-- Text -->
+  <text x="58" y="21" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="10" fill="#888">Available in the</text>
+  <text x="58" y="39" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16" font-weight="600" fill="#222">Chrome Web Store</text>
+</svg>
