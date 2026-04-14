@@ -17,6 +17,8 @@ Chrome extension that adds millisecond precision to YouTube video timestamps, an
 
 ## Installation
 
+**[Website](https://1gory.github.io/youtube-milliseconds-extension/)**
+
 ### Chrome Web Store
 [<img src="https://raw.githubusercontent.com/1gory/youtube-milliseconds-extension/main/docs/chrome-webstore-badge.svg" alt="Available in the Chrome Web Store" height="58">](https://chromewebstore.google.com/detail/youtube-milliseconds-time/bchlendkhiidadpakkfgnpeklmifffcp)
 
