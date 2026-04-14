@@ -2,7 +2,7 @@
 
 Chrome extension that adds millisecond precision to YouTube video timestamps, an interval timer A→B, one-click copy, and a watch time stats dashboard.
 
-[<img src="https://raw.githubusercontent.com/1gory/motivation-age-counter-extension/main/docs/chrome-webstore-badge.png" alt="Available in the Chrome Web Store" height="58">](https://chromewebstore.google.com/detail/motivation-counter/bchlendkhiidadpakkfgnpeklmifffcp)
+[<img src="https://raw.githubusercontent.com/1gory/youtube-milliseconds-extension/main/docs/chrome-webstore-badge.png" alt="Available in the Chrome Web Store" height="58">](https://chromewebstore.google.com/detail/youtube-milliseconds-time/bchlendkhiidadpakkfgnpeklmifffcp)
 
 **[Website](https://1gory.github.io/youtube-milliseconds-extension/)** &nbsp;·&nbsp; **[Privacy Policy](https://1gory.github.io/youtube-milliseconds-extension/privacy-policy.html)**
 
