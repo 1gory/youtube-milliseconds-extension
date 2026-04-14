@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>YouTube Milliseconds Timer</title>
+  <meta name="description" content="Chrome extension that adds millisecond precision to YouTube, an interval timer A→B, one-click copy, and a watch time stats dashboard.">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f5f5f5;
+      color: #222;
+      line-height: 1.6;
+    }
+
+    header {
+      background: #fff;
+      border-bottom: 1px solid #e8e8e8;
+      padding: 48px 24px 40px;
+      text-align: center;
+    }
+
+    .logo {
+      width: 72px;
+      height: 72px;
+      margin: 0 auto 16px;
+      display: block;
+    }
+
+    h1 {
+      font-size: 28px;
+      font-weight: 600;
+      margin-bottom: 10px;
+    }
+
+    .tagline {
+      font-size: 16px;
+      color: #666;
+      max-width: 520px;
+      margin: 0 auto 28px;
+    }
+
+    .cws-badge {
+      display: inline-block;
+      margin-bottom: 8px;
+    }
+
+    .cws-badge img {
+      height: 58px;
+      transition: opacity 0.15s;
+    }
+
+    .cws-badge:hover img { opacity: 0.85; }
+
+    main {
+      max-width: 720px;
+      margin: 48px auto;
+      padding: 0 24px;
+    }
+
+    .features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 16px;
+      margin-bottom: 48px;
+    }
+
+    .feature {
+      background: #fff;
+      border-radius: 8px;
+      padding: 20px 22px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+
+    .feature-icon {
+      font-size: 24px;
+      margin-bottom: 10px;
+    }
+
+    .feature h2 {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+
+    .feature p {
+      font-size: 13px;
+      color: #555;
+    }
+
+    .links {
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      overflow: hidden;
+      margin-bottom: 48px;
+    }
+
+    .links a {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 16px 22px;
+      color: #222;
+      text-decoration: none;
+      border-bottom: 1px solid #f0f0f0;
+      transition: background 0.12s;
+    }
+
+    .links a:last-child { border-bottom: none; }
+    .links a:hover { background: #fafafa; }
+
+    .link-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    .link-icon--red   { background: rgba(217,64,64,0.1); }
+    .link-icon--dark  { background: #f0f0f0; }
+    .link-icon--blue  { background: rgba(66,133,244,0.1); }
+    .link-icon--gray  { background: #f0f0f0; }
+
+    .link-text strong {
+      display: block;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .link-text span {
+      font-size: 12px;
+      color: #888;
+    }
+
+    .link-arrow {
+      margin-left: auto;
+      color: #ccc;
+      font-size: 18px;
+    }
+
+    footer {
+      text-align: center;
+      padding: 24px;
+      font-size: 12px;
+      color: #aaa;
+    }
+
+    footer a { color: #aaa; }
+  </style>
+</head>
+<body>
+
+<header>
+  <img class="logo" src="../icons/icon128.png" alt="Extension icon">
+  <h1>YouTube Milliseconds Timer</h1>
+  <p class="tagline">Millisecond-accurate timestamps, interval timer A→B, one-click copy, and a watch time stats dashboard — all inside YouTube's native player.</p>
+  <a class="cws-badge" href="https://chromewebstore.google.com/detail/youtube-milliseconds-time/bchlendkhiidadpakkfgnpeklmifffcp" target="_blank" rel="noopener">
+    <img src="https://storage.googleapis.com/web-dev-uploads/image/WlD8wC6g8khYWPJUsQceQkhXSlv1/UV4C4sCIILQ7HIeydxAm.png" alt="Available in the Chrome Web Store">
+  </a>
+</header>
+
+<main>
+
+  <div class="features">
+    <div class="feature">
+      <div class="feature-icon">⏱</div>
+      <h2>Millisecond timestamps</h2>
+      <p>Time displays in M:SS.mmm format directly in the player — no overlays, no clutter. Toggle on/off anytime.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">📋</div>
+      <h2>One-click copy</h2>
+      <p>A copy button next to the timestamp lets you grab the exact moment instantly — great for notes, subtitles, or editing.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">↔️</div>
+      <h2>Interval timer A→B</h2>
+      <p>Mark two points with <kbd style="font-family:monospace;background:#f0f0f0;padding:1px 5px;border-radius:3px;font-size:12px">[</kbd> and <kbd style="font-family:monospace;background:#f0f0f0;padding:1px 5px;border-radius:3px;font-size:12px">]</kbd>, see the exact delta down to the millisecond, copy it with one click.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">📊</div>
+      <h2>Watch time stats</h2>
+      <p>Total time, today, daily average, 7-day bar chart, and a monthly calendar heatmap — all stored locally on your device.</p>
+    </div>
+  </div>
+
+  <div class="links">
+    <a href="https://chromewebstore.google.com/detail/youtube-milliseconds-time/bchlendkhiidadpakkfgnpeklmifffcp" target="_blank" rel="noopener">
+      <div class="link-icon link-icon--red">🧩</div>
+      <div class="link-text">
+        <strong>Chrome Web Store</strong>
+        <span>Install the extension</span>
+      </div>
+      <span class="link-arrow">›</span>
+    </a>
+    <a href="https://github.com/1gory/youtube-milliseconds-extension" target="_blank" rel="noopener">
+      <div class="link-icon link-icon--dark">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="#333"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577v-2.165c-3.338.726-4.042-1.61-4.042-1.61-.546-1.387-1.333-1.756-1.333-1.756-1.09-.745.083-.73.083-.73 1.205.085 1.84 1.237 1.84 1.237 1.07 1.835 2.809 1.305 3.495.998.108-.776.418-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.468-2.38 1.235-3.22-.123-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.3 1.23a11.52 11.52 0 0 1 3-.404c1.02.005 2.047.138 3 .404 2.29-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.12 3.176.77.84 1.232 1.91 1.232 3.22 0 4.61-2.807 5.625-5.48 5.92.43.372.823 1.102.823 2.222v3.293c0 .322.218.694.825.576C20.565 21.796 24 17.298 24 12c0-6.63-5.37-12-12-12z"/></svg>
+      </div>
+      <div class="link-text">
+        <strong>GitHub</strong>
+        <span>Source code and releases</span>
+      </div>
+      <span class="link-arrow">›</span>
+    </a>
+    <a href="https://github.com/1gory/youtube-milliseconds-extension/releases" target="_blank" rel="noopener">
+      <div class="link-icon link-icon--gray">📦</div>
+      <div class="link-text">
+        <strong>Releases</strong>
+        <span>Download ZIP for manual installation</span>
+      </div>
+      <span class="link-arrow">›</span>
+    </a>
+    <a href="privacy-policy.html">
+      <div class="link-icon link-icon--gray">🔒</div>
+      <div class="link-text">
+        <strong>Privacy Policy</strong>
+        <span>No data collected — everything stays on your device</span>
+      </div>
+      <span class="link-arrow">›</span>
+    </a>
+    <a href="https://github.com/1gory/youtube-milliseconds-extension/blob/main/LICENSE" target="_blank" rel="noopener">
+      <div class="link-icon link-icon--gray">📄</div>
+      <div class="link-text">
+        <strong>MIT License</strong>
+        <span>Open source · © Igor Pershin</span>
+      </div>
+      <span class="link-arrow">›</span>
+    </a>
+  </div>
+
+</main>
+
+<footer>
+  Made by <a href="https://github.com/1gory" target="_blank" rel="noopener">Igor Pershin</a>
+</footer>
+
+</body>
+</html>
