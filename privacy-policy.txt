@@ -1,5 +1,9 @@
 Privacy Policy for YouTube Milliseconds Timer
 
 This extension does not collect, store, or transmit any personal data.
-All processing happens locally in your browser.
+
+All data (watch time statistics and user settings) is stored exclusively
+on the user's local device using Chrome's built-in storage API.
+No data is sent to any server, third party, or external service.
 No analytics or tracking are implemented.
+The clipboard is accessed only when the user explicitly clicks a copy button.

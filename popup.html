@@ -10,10 +10,32 @@
     <h3>YouTube Time Tracker</h3>
   </div>
   <div class="stats">
-    <div class="stat-item">
-      <span class="label">Total watch time:</span>
-      <span class="value" id="totalTime">Loading...</span>
-    </div>
+    <details class="stats-detail">
+      <summary class="stats-summary stat-item">
+        <div class="stats-summary__main">
+          <span class="label">Total watch time</span>
+          <span class="value" id="totalTime">Loading...</span>
+        </div>
+        <span class="stats-chevron">▾</span>
+      </summary>
+      <div class="stat-item stat-row">
+        <div class="stat-col">
+          <span class="label">Today</span>
+          <span class="value" id="todayTime">—</span>
+        </div>
+        <div class="stat-col">
+          <span class="label">Daily avg</span>
+          <span class="value" id="avgTime">—</span>
+          <div class="avg-tabs">
+            <button class="avg-tab avg-tab--active" data-period="7d">7d</button>
+            <button class="avg-tab" data-period="30d">30d</button>
+            <button class="avg-tab" data-period="all">All</button>
+          </div>
+        </div>
+      </div>
+      <div class="chart-container" id="weekChart"></div>
+      <div class="cal-container" id="monthCalendar"></div>
+    </details>
   </div>
   <div class="settings">
     <div class="setting-item">
@@ -22,6 +44,14 @@
         <span class="checkmark"></span>
         Show milliseconds
       </label>
+    </div>
+    <div class="setting-item">
+      <label class="checkbox-container">
+        <input type="checkbox" id="showIntervalTimer" checked>
+        <span class="checkmark"></span>
+        Interval timer (A / B)
+      </label>
+      <p class="setting-hint">Set points with <kbd>[</kbd> and <kbd>]</kbd></p>
     </div>
   </div>
   <div class="footer">

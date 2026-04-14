@@ -1,16 +1,17 @@
 # YouTube Milliseconds Timer
 
-Chrome extension that adds millisecond precision to YouTube video timestamps, lets you copy any moment with one click, and tracks your total viewing time.
+Chrome extension that adds millisecond precision to YouTube video timestamps, an interval timer A→B, one-click copy, and a watch time stats dashboard.
 
 ## Screenshots
-![Extension Preview](screenshots/1.jpg)
-![Extension Preview](screenshots/2.jpg)
+<img src="screenshots/1.jpg" width="600" alt="Extension Preview">
+<img src="screenshots/2.jpg" width="600" alt="Extension Preview">
 
 ## Features
-- Millisecond-accurate timestamps in MM:SS.mmm format (e.g. 1:23:45.678)
+- Millisecond-accurate timestamps in M:SS.mmm format (e.g. 1:23.456)
 - One-click copy button next to the timestamp — copies the exact moment to clipboard
-- Total watch time tracker across all YouTube sessions, including Shorts
-- Toggle milliseconds on/off via the extension popup
+- Interval timer A→B — mark two points with `[` and `]` keys (or buttons), see the exact delta down to the millisecond, copy it with one click, visual markers on the progress bar
+- Watch time stats dashboard: total time, today, daily average (7d / 30d / all), 7-day bar chart, monthly calendar heatmap with month navigation
+- Toggle milliseconds and interval timer on/off via the extension popup
 - Works with all YouTube videos, playlists, and Shorts
 - No overlays, no clutter — integrates directly into the native player
 
@@ -20,7 +21,8 @@ Available in Chrome Web Store: [YouTube Milliseconds Timer](https://chromewebsto
 ## Usage
 - **Timestamps**: Millisecond precision is shown automatically on all YouTube videos
 - **Copy button**: Click the clipboard icon next to the time to copy the exact timestamp
-- **Settings**: Click the extension icon to toggle milliseconds and view watch time stats
+- **Interval timer**: Press `[` to set point A, `]` to set point B — or use the A/B buttons in the player. The delta appears above the controls
+- **Settings**: Click the extension icon to toggle features and view watch time stats
 - **Time Tracking**: Only counts time when video is actively playing
 
 ## Development
@@ -38,7 +40,7 @@ npm test
 
 ### Package for Chrome Web Store
 ```bash
-zip -r youtube-milliseconds-v1.3.0.zip manifest.json popup.html popup.css styles.css js/ icons/
+zip -r youtube-milliseconds-v1.4.0.zip manifest.json popup.html popup.css styles.css js/ icons/
 ```
 
 The zip includes only the files required by the extension. Do **not** include `node_modules/`, `tests/`, screenshots, or any markdown files.

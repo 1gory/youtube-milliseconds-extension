@@ -44,6 +44,11 @@ if (typeof document !== 'undefined') {
   let displayModeRetries = 0;
   const MAX_DISPLAY_MODE_RETRIES = 50; // 5 seconds max
 
+  let intervalStartTime = null;
+  let intervalEndTime = null;
+  let intervalKeyboardSetup = false;
+  let showIntervalTimer = true;
+
   const COPY_ICON = `<svg viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
     <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/>
     <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/>
@@ -57,9 +62,11 @@ if (typeof document !== 'undefined') {
   loadSettings();
 
   async function loadSettings() {
+    if (!chrome.runtime?.id) return;
     try {
-      const data = await chrome.storage.local.get(['showMilliseconds']);
+      const data = await chrome.storage.local.get(['showMilliseconds', 'showIntervalTimer']);
       showMilliseconds = data.showMilliseconds !== false;
+      showIntervalTimer = data.showIntervalTimer !== false;
       if (isInitialized) {
         updateDisplayMode();
       }
@@ -70,12 +77,25 @@ if (typeof document !== 'undefined') {
 
   // Listen for storage changes (when settings are updated from popup)
   chrome.storage.onChanged.addListener((changes, namespace) => {
-    if (namespace === 'local' && changes.showMilliseconds) {
+    if (namespace !== 'local') return;
+
+    if (changes.showMilliseconds) {
       showMilliseconds = changes.showMilliseconds.newValue;
       displayModeRetries = 0;
       updateDisplayMode();
     }
+
+    if (changes.showIntervalTimer) {
+      showIntervalTimer = changes.showIntervalTimer.newValue;
+      if (showIntervalTimer) {
+        setupIntervalControls();
+      } else {
+        teardownIntervalControls();
+      }
+    }
   });
+
+  let timeElementsObserver = null;
 
   // Function to update time display
   function updateTimeDisplay() {
@@ -86,12 +106,27 @@ if (typeof document !== 'undefined') {
     const durationElement = document.querySelector('.ytp-time-duration');
 
     if (currentTimeElement && !isNaN(video.currentTime)) {
-      currentTimeElement.textContent = formatVideoTime(video.currentTime, showMilliseconds);
+      const text = formatVideoTime(video.currentTime, showMilliseconds);
+      if (currentTimeElement.textContent !== text) {
+        currentTimeElement.textContent = text;
+      }
     }
 
     if (durationElement && !isNaN(video.duration)) {
-      durationElement.textContent = formatVideoTime(video.duration, showMilliseconds);
+      const text = formatVideoTime(video.duration, showMilliseconds);
+      if (durationElement.textContent !== text) {
+        durationElement.textContent = text;
+      }
     }
+  }
+
+  // Watch for YouTube overwriting our time elements and immediately restore our format
+  function observeTimeElements(currentTimeElement, durationElement) {
+    if (timeElementsObserver) timeElementsObserver.disconnect();
+
+    timeElementsObserver = new MutationObserver(updateTimeDisplay);
+    timeElementsObserver.observe(currentTimeElement, { childList: true, characterData: true, subtree: true });
+    timeElementsObserver.observe(durationElement,    { childList: true, characterData: true, subtree: true });
   }
 
   // Function to update display mode immediately
@@ -118,9 +153,14 @@ if (typeof document !== 'undefined') {
       currentTimeElement.classList.add('ytp-time-milliseconds');
       durationElement.classList.add('ytp-time-milliseconds');
       displayUpdateInterval = setInterval(updateTimeDisplay, 10);
+      observeTimeElements(currentTimeElement, durationElement);
     } else {
       currentTimeElement.classList.remove('ytp-time-milliseconds');
       durationElement.classList.remove('ytp-time-milliseconds');
+      if (timeElementsObserver) {
+        timeElementsObserver.disconnect();
+        timeElementsObserver = null;
+      }
       // Keep a slow interval — we own the textContent, YouTube won't update it reliably on its own
       displayUpdateInterval = setInterval(updateTimeDisplay, 250);
     }
@@ -130,16 +170,27 @@ if (typeof document !== 'undefined') {
   function updateWatchTime() {
     if (!isVideoPlaying) return;
 
+    // chrome.runtime.id becomes undefined when the extension context is invalidated
+    // (e.g. after a reload in dev mode). Stop all tracking to avoid repeated errors.
+    if (!chrome.runtime?.id) {
+      stopAllTracking();
+      return;
+    }
+
     const now = Date.now();
     const elapsed = (now - lastTrackingTime) / 1000;
 
     if (elapsed > 0 && elapsed < 10) {
-      chrome.runtime.sendMessage({
-        type: 'UPDATE_WATCH_TIME',
-        seconds: elapsed
-      }).catch(() => {
-        // Ignore errors if background script is not ready
-      });
+      try {
+        chrome.runtime.sendMessage({
+          type: 'UPDATE_WATCH_TIME',
+          seconds: elapsed
+        }).catch(() => {
+          // Ignore errors if background script is not ready
+        });
+      } catch {
+        stopAllTracking();
+      }
     }
 
     lastTrackingTime = now;
@@ -208,6 +259,130 @@ if (typeof document !== 'undefined') {
     document.body.removeChild(el);
   }
 
+  // Update visual markers on the progress bar for interval points A and B
+  function updateProgressMarkers() {
+    const markerA = document.querySelector('.ytp-interval-marker-a');
+    const markerB = document.querySelector('.ytp-interval-marker-b');
+    const segment = document.querySelector('.ytp-interval-segment');
+    const video = document.querySelector('video');
+
+    if (!markerA || !markerB || !segment || !video || isNaN(video.duration) || video.duration === 0) return;
+
+    if (intervalStartTime !== null) {
+      const posA = (intervalStartTime / video.duration) * 100;
+      markerA.style.left = `${posA}%`;
+      markerA.style.display = '';
+    } else {
+      markerA.style.display = 'none';
+    }
+
+    if (intervalEndTime !== null) {
+      const posB = (intervalEndTime / video.duration) * 100;
+      markerB.style.left = `${posB}%`;
+      markerB.style.display = '';
+    } else {
+      markerB.style.display = 'none';
+    }
+
+    if (intervalStartTime !== null && intervalEndTime !== null) {
+      const posA = (intervalStartTime / video.duration) * 100;
+      const posB = (intervalEndTime / video.duration) * 100;
+      segment.style.left = `${Math.min(posA, posB)}%`;
+      segment.style.width = `${Math.abs(posB - posA)}%`;
+      segment.style.display = '';
+    } else {
+      segment.style.display = 'none';
+    }
+  }
+
+  // Update the floating badge and progress markers to reflect current interval state
+  function updateIntervalUI() {
+    const badge = document.querySelector('.ytp-interval-badge');
+    if (!badge) return;
+
+    const timeA = badge.querySelector('[data-interval="start"]');
+    const timeB = badge.querySelector('[data-interval="end"]');
+    const timeDelta = badge.querySelector('[data-interval="delta"]');
+    const copyBtn = badge.querySelector('.ytp-interval-copy-btn');
+
+    if (intervalStartTime !== null) {
+      badge.classList.add('ytp-interval-badge--visible');
+      if (timeA) timeA.textContent = formatVideoTime(intervalStartTime, true);
+    }
+
+    if (timeB) timeB.textContent = intervalEndTime !== null ? formatVideoTime(intervalEndTime, true) : '—';
+
+    if (intervalStartTime !== null && intervalEndTime !== null) {
+      const delta = Math.abs(intervalEndTime - intervalStartTime);
+      if (timeDelta) timeDelta.textContent = formatVideoTime(delta, true);
+      if (copyBtn) copyBtn.disabled = false;
+    } else {
+      if (timeDelta) timeDelta.textContent = '—';
+      if (copyBtn) copyBtn.disabled = true;
+    }
+
+    updateProgressMarkers();
+  }
+
+  // Record the current video position as interval start ('start') or end ('end')
+  function setIntervalPoint(which) {
+    const video = document.querySelector('video');
+    if (!video) return;
+
+    if (which === 'start') {
+      intervalStartTime = video.currentTime;
+    } else {
+      intervalEndTime = video.currentTime;
+    }
+    updateIntervalUI();
+  }
+
+  // Clear both interval points and hide the badge and markers
+  function resetInterval() {
+    intervalStartTime = null;
+    intervalEndTime = null;
+
+    const badge = document.querySelector('.ytp-interval-badge');
+    if (badge) badge.classList.remove('ytp-interval-badge--visible');
+
+    const markerA = document.querySelector('.ytp-interval-marker-a');
+    const markerB = document.querySelector('.ytp-interval-marker-b');
+    const segment = document.querySelector('.ytp-interval-segment');
+    if (markerA) markerA.style.display = 'none';
+    if (markerB) markerB.style.display = 'none';
+    if (segment) segment.style.display = 'none';
+  }
+
+  // Copy the interval delta (Δ) to clipboard and show brief feedback on the copy button
+  function copyIntervalDelta() {
+    if (intervalStartTime === null || intervalEndTime === null) return;
+
+    const delta = Math.abs(intervalEndTime - intervalStartTime);
+    const deltaText = formatVideoTime(delta, true);
+
+    const badge = document.querySelector('.ytp-interval-badge');
+    const copyBtn = badge?.querySelector('.ytp-interval-copy-btn');
+
+    const showCopied = () => {
+      if (!copyBtn) return;
+      clearTimeout(copyBtn._resetTimeout);
+      copyBtn.textContent = '✓';
+      copyBtn._resetTimeout = setTimeout(() => {
+        copyBtn.textContent = '⎘';
+      }, 1500);
+    };
+
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(deltaText).then(showCopied).catch(() => {
+        fallbackCopy(deltaText);
+        showCopied();
+      });
+    } else {
+      fallbackCopy(deltaText);
+      showCopied();
+    }
+  }
+
   // Create and inject the copy-timestamp button after .ytp-time-display
   function setupCopyButton() {
     // Remove stale button from previous page
@@ -257,6 +432,131 @@ if (typeof document !== 'undefined') {
     timeDisplay.insertAdjacentElement('afterend', btn);
   }
 
+  // Remove all interval UI elements and reset state (used when feature is disabled)
+  function teardownIntervalControls() {
+    resetInterval();
+    document.querySelector('.ytp-interval-btn-a')?.remove();
+    document.querySelector('.ytp-interval-btn-b')?.remove();
+    document.querySelector('.ytp-interval-badge')?.remove();
+    document.querySelector('.ytp-interval-marker-a')?.remove();
+    document.querySelector('.ytp-interval-marker-b')?.remove();
+    document.querySelector('.ytp-interval-segment')?.remove();
+  }
+
+  // Register [ and ] keyboard shortcuts for setting interval points A and B
+  function setupIntervalKeyboardShortcuts() {
+    document.addEventListener('keydown', (e) => {
+      if (!showIntervalTimer) return;
+      if (['INPUT', 'TEXTAREA'].includes(e.target.tagName) || e.target.isContentEditable) return;
+
+      if (e.key === '[') {
+        e.preventDefault();
+        setIntervalPoint('start');
+      } else if (e.key === ']') {
+        e.preventDefault();
+        setIntervalPoint('end');
+      }
+    });
+  }
+
+  // Create and inject interval A/B buttons, the floating badge, and progress bar markers
+  function setupIntervalControls() {
+    if (!showIntervalTimer) return;
+
+    // Remove stale elements from previous page
+    document.querySelector('.ytp-interval-btn-a')?.remove();
+    document.querySelector('.ytp-interval-btn-b')?.remove();
+    document.querySelector('.ytp-interval-badge')?.remove();
+    document.querySelector('.ytp-interval-marker-a')?.remove();
+    document.querySelector('.ytp-interval-marker-b')?.remove();
+    document.querySelector('.ytp-interval-segment')?.remove();
+
+    // Skip Shorts — same check as setupCopyButton
+    if (window.location.pathname.startsWith('/shorts/')) return;
+
+    const copyBtn = document.querySelector('.ytp-copy-time-btn');
+    if (!copyBtn) return;
+
+    const btnA = document.createElement('button');
+    btnA.className = 'ytp-interval-btn ytp-interval-btn-a';
+    btnA.title = 'Set interval start (A)';
+    btnA.setAttribute('aria-label', 'Set interval start point A');
+    btnA.textContent = 'A';
+    btnA.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setIntervalPoint('start');
+    });
+
+    const btnB = document.createElement('button');
+    btnB.className = 'ytp-interval-btn ytp-interval-btn-b';
+    btnB.title = 'Set interval end (B)';
+    btnB.setAttribute('aria-label', 'Set interval end point B');
+    btnB.textContent = 'B';
+    btnB.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setIntervalPoint('end');
+    });
+
+    // Insert A then B after copyBtn → results in [copy][A][B]
+    copyBtn.insertAdjacentElement('afterend', btnB);
+    copyBtn.insertAdjacentElement('afterend', btnA);
+
+    // Create floating badge
+    const badge = document.createElement('div');
+    badge.className = 'ytp-interval-badge';
+    badge.innerHTML = `
+      <div class="ytp-interval-badge__row">
+        <span class="ytp-interval-badge__label">A</span>
+        <span class="ytp-interval-badge__time" data-interval="start">—</span>
+      </div>
+      <div class="ytp-interval-badge__row">
+        <span class="ytp-interval-badge__label">B</span>
+        <span class="ytp-interval-badge__time" data-interval="end">—</span>
+      </div>
+      <div class="ytp-interval-badge__row">
+        <span class="ytp-interval-badge__label">Δ</span>
+        <span class="ytp-interval-badge__time" data-interval="delta">—</span>
+        <button class="ytp-interval-copy-btn" title="Copy Δ to clipboard" disabled>⎘</button>
+        <button class="ytp-interval-reset-btn" title="Reset interval">×</button>
+      </div>
+    `;
+
+    badge.querySelector('.ytp-interval-copy-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      copyIntervalDelta();
+    });
+
+    badge.querySelector('.ytp-interval-reset-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      resetInterval();
+    });
+
+    const videoContainer = document.querySelector('#movie_player') || document.querySelector('.html5-video-container');
+    if (videoContainer) {
+      videoContainer.appendChild(badge);
+    }
+
+    // Create progress bar markers and segment
+    const progressBar = document.querySelector('.ytp-progress-bar');
+    if (progressBar) {
+      const segment = document.createElement('div');
+      segment.className = 'ytp-interval-segment';
+      segment.style.display = 'none';
+
+      const markerA = document.createElement('div');
+      markerA.className = 'ytp-interval-marker ytp-interval-marker-a';
+      markerA.style.display = 'none';
+
+      const markerB = document.createElement('div');
+      markerB.className = 'ytp-interval-marker ytp-interval-marker-b';
+      markerB.style.display = 'none';
+
+      progressBar.appendChild(segment);
+      progressBar.appendChild(markerA);
+      progressBar.appendChild(markerB);
+    }
+  }
+
   // Function to initialize the extension
   function initializeExtension() {
     if (initializationInProgress) return;
@@ -284,6 +584,12 @@ if (typeof document !== 'undefined') {
         // updateDisplayMode retries internally if elements aren't found yet
         updateDisplayMode();
         setupCopyButton();
+        setupIntervalControls();
+
+        if (!intervalKeyboardSetup) {
+          setupIntervalKeyboardShortcuts();
+          intervalKeyboardSetup = true;
+        }
 
         console.log('YouTube Milliseconds Timer activated');
       }
@@ -299,6 +605,8 @@ if (typeof document !== 'undefined') {
   function handleNavigation() {
     isInitialized = false;
     currentVideoElement = null;
+    intervalStartTime = null;
+    intervalEndTime = null;
     stopAllTracking();
     setTimeout(initializeExtension, 500);
   }

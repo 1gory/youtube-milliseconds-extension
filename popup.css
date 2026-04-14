@@ -1,9 +1,25 @@
+:root {
+    --accent:       #d94040;
+    --accent-hover: #bf3030;
+    --accent-soft:  rgba(217, 64, 64, 0.15);
+
+    --text-primary:   #333;
+    --text-secondary: #777;
+    --text-muted:     #aaa;
+
+    --bg-page:  #f5f5f5;
+    --bg-card:  #fff;
+    --bg-bar:   #e8e8e8;
+    --border:   #e8e8e8;
+    --shadow:   0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
 body {
     width: 300px;
     margin: 0;
     padding: 0;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background-color: #f5f5f5;
+    background-color: var(--bg-page);
 }
 
 .container {
@@ -13,13 +29,13 @@ body {
 .header {
     text-align: center;
     margin-bottom: 16px;
-    border-bottom: 1px solid #ddd;
+    border-bottom: 1px solid var(--border);
     padding-bottom: 12px;
 }
 
 .header h3 {
     margin: 0;
-    color: #333;
+    color: var(--text-primary);
     font-size: 16px;
     font-weight: 500;
 }
@@ -31,32 +47,325 @@ body {
 .stat-item {
     margin-bottom: 12px;
     padding: 8px;
-    background: white;
+    background: var(--bg-card);
     border-radius: 6px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    box-shadow: var(--shadow);
 }
 
 .label {
-    display: block;
     font-size: 12px;
-    color: #666;
-    margin-bottom: 4px;
+    color: var(--text-secondary);
+    flex: 1;
+    white-space: nowrap;
 }
 
 .value {
-    display: block;
     font-size: 14px;
     font-weight: 600;
-    color: #333;
+    color: var(--text-primary);
     font-family: 'Roboto Mono', monospace;
+    white-space: nowrap;
 }
 
+/* Average period selector */
+.avg-tabs {
+    flex-basis: 100%;
+    margin-top: 4px;
+    display: flex;
+    gap: 2px;
+}
+
+.avg-tab {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    font-size: 9px;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 1px 4px;
+    line-height: 1.4;
+    transition: color 0.15s, border-color 0.15s;
+}
+
+.avg-tab:hover {
+    color: var(--text-secondary);
+    border-color: #ccc;
+}
+
+.avg-tab--active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+
+/* Two-column stat row (Today / Daily avg) */
+.stat-row {
+    display: flex;
+    gap: 8px;
+    padding: 0;
+    background: none;
+    box-shadow: none;
+}
+
+.stat-col {
+    flex: 1;
+    padding: 8px;
+    background: var(--bg-card);
+    border-radius: 6px;
+    box-shadow: var(--shadow);
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0 6px;
+}
+
+/* 7-day bar chart */
+.chart-container {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    height: 80px;
+    gap: 3px;
+    background: var(--bg-card);
+    border-radius: 6px;
+    box-shadow: var(--shadow);
+    padding: 8px;
+    box-sizing: border-box;
+    margin-bottom: 12px;
+}
+
+.chart-col {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+    height: 100%;
+    justify-content: flex-end;
+}
+
+.chart-tooltip {
+    display: none;
+    position: absolute;
+    bottom: calc(100% - 14px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.65);
+    color: white;
+    padding: 2px 5px;
+    border-radius: 3px;
+    font-size: 9px;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 10;
+}
+
+.chart-col:hover .chart-tooltip {
+    display: block;
+}
+
+.chart-bar {
+    width: 100%;
+    background: var(--bg-bar);
+    border-radius: 3px 3px 0 0;
+    min-height: 3px;
+}
+
+.chart-bar--today {
+    background: var(--accent);
+}
+
+.chart-day {
+    font-size: 9px;
+    color: var(--text-muted);
+    margin-top: 3px;
+    text-align: center;
+    line-height: 1;
+}
+
+.chart-day--today {
+    color: var(--accent);
+    font-weight: 700;
+}
+
+/* Monthly calendar heatmap */
+.cal-container {
+    background: var(--bg-card);
+    border-radius: 6px;
+    box-shadow: var(--shadow);
+    padding: 10px;
+    margin-bottom: 12px;
+}
+
+.cal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+}
+
+.cal-nav {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 14px;
+    line-height: 1;
+    padding: 0 4px;
+    transition: color 0.15s;
+}
+
+.cal-nav:hover:not(:disabled) {
+    color: var(--text-primary);
+}
+
+.cal-nav:disabled {
+    opacity: 0.25;
+    cursor: default;
+}
+
+.cal-weekdays {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    margin-bottom: 3px;
+}
+
+.cal-wd {
+    font-size: 9px;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+.cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+}
+
+.cal-day {
+    position: relative;
+    aspect-ratio: 1;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    color: var(--text-muted);
+    cursor: default;
+}
+
+.cal-day[data-time]::after {
+    content: attr(data-time);
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 4px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.65);
+    color: #fff;
+    padding: 2px 5px;
+    border-radius: 3px;
+    font-size: 9px;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 20;
+}
+
+.cal-day[data-time]:hover::after {
+    display: block;
+}
+
+.cal-day--l0 { background: #f5f5f5; }
+.cal-day--l1 { background: #fce8e8; color: #c06060; }
+.cal-day--l2 { background: #f5b8b8; color: #903030; }
+.cal-day--l3 { background: #e87878; color: #fff; }
+.cal-day--l4 { background: var(--accent); color: #fff; }
+
+.cal-day--today {
+    outline: 2px solid var(--accent-hover);
+    outline-offset: -2px;
+    opacity: 0.75;
+    color: inherit;
+}
+
+/* Legend */
+.cal-legend {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+}
+
+.cal-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 9px;
+    color: var(--text-muted);
+}
+
+.cal-legend-swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    flex-shrink: 0;
+}
+
+/* Collapsible stats section */
+.stats-detail {
+    margin-bottom: 12px;
+}
+
+.stats-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+    outline: none;
+    margin-bottom: 0;
+}
+
+.stats-summary::-webkit-details-marker {
+    display: none;
+}
+
+.stats-summary__main {
+    flex: 1;
+    display: flex;
+    align-items: baseline;
+    gap: 0 8px;
+}
+
+.stats-chevron {
+    font-size: 12px;
+    color: var(--text-muted);
+    transition: transform 0.2s;
+    display: inline-block;
+    margin-left: 8px;
+    line-height: 1;
+}
+
+.stats-detail[open] .stats-chevron {
+    transform: rotate(180deg);
+}
+
+.stats-detail[open] .stats-summary {
+    margin-bottom: 8px;
+}
+
+/* Settings */
 .settings {
     margin-bottom: 16px;
     padding: 12px;
-    background: white;
+    background: var(--bg-card);
     border-radius: 6px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    box-shadow: var(--shadow);
 }
 
 .setting-item {
@@ -72,7 +381,7 @@ body {
     align-items: center;
     cursor: pointer;
     font-size: 13px;
-    color: #333;
+    color: var(--text-primary);
     user-select: none;
 }
 
@@ -81,14 +390,33 @@ body {
     cursor: pointer;
 }
 
+.setting-hint {
+    margin: 4px 0 0 0;
+    padding-left: 22px;
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.setting-hint kbd {
+    display: inline-block;
+    padding: 1px 5px;
+    font-size: 10px;
+    font-family: 'Roboto Mono', monospace;
+    background: #f5f5f5;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text-secondary);
+}
+
+/* Footer */
 .footer {
     text-align: center;
     padding-top: 12px;
-    border-top: 1px solid #ddd;
+    border-top: 1px solid var(--border);
 }
 
 #resetBtn {
-    background-color: #ff4444;
+    background-color: var(--accent);
     color: white;
     border: none;
     padding: 8px 16px;
@@ -99,9 +427,9 @@ body {
 }
 
 #resetBtn:hover {
-    background-color: #cc3333;
+    background-color: var(--accent-hover);
 }
 
 #resetBtn:active {
-    background-color: #aa2222;
+    background-color: #903535;
 }

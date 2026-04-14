@@ -55,3 +55,116 @@
 .ytp-copy-time-btn--copied {
     color: #4ade80 !important;
 }
+
+/* Interval A/B buttons in control bar */
+.ytp-interval-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0 5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 255, 255, 0.75);
+    transition: color 0.15s;
+    vertical-align: middle;
+    height: 100%;
+    outline: none;
+    flex-shrink: 0;
+    font-size: 12px;
+    font-weight: 700;
+    font-family: 'Roboto', Arial, sans-serif;
+    line-height: 1;
+}
+
+.ytp-interval-btn:hover {
+    color: #fff;
+}
+
+.ytp-interval-btn:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.5);
+    border-radius: 3px;
+}
+
+/* Floating interval badge */
+.ytp-interval-badge {
+    position: absolute;
+    bottom: 52px;
+    left: 12px;
+    background: rgba(0, 0, 0, 0.78);
+    color: #fff;
+    border-radius: 6px;
+    padding: 7px 10px;
+    font-family: 'Roboto Mono', 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 1.65;
+    z-index: 100;
+    display: none;
+    pointer-events: none;
+}
+
+.ytp-interval-badge--visible {
+    display: block;
+}
+
+.ytp-interval-badge__row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ytp-interval-badge__label {
+    width: 12px;
+    opacity: 0.55;
+    font-size: 11px;
+    text-align: center;
+}
+
+.ytp-interval-badge__time {
+    min-width: 72px;
+}
+
+.ytp-interval-copy-btn,
+.ytp-interval-reset-btn {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.55);
+    cursor: pointer;
+    padding: 0 2px;
+    font-size: 14px;
+    line-height: 1;
+    pointer-events: all;
+    transition: color 0.15s;
+}
+
+.ytp-interval-copy-btn:hover,
+.ytp-interval-reset-btn:hover {
+    color: #fff;
+}
+
+.ytp-interval-copy-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+
+/* Vertical markers on the progress bar */
+.ytp-interval-marker {
+    position: absolute;
+    top: 0;
+    width: 2px;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.9);
+    pointer-events: none;
+    z-index: 30;
+    transform: translateX(-50%);
+}
+
+/* Highlighted segment between A and B markers */
+.ytp-interval-segment {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.22);
+    pointer-events: none;
+    z-index: 20;
+}

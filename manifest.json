@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "YouTube Milliseconds Timer",
-  "version": "1.3.0",
-  "description": "Adds millisecond precision to YouTube video timestamps, copy any moment with one click, and track total watch time",
+  "version": "1.4.0",
+  "description": "Millisecond timestamps, interval timer A→B, one-click copy, and detailed watch time stats with weekly chart and calendar",
   "permissions": [
     "storage",
     "clipboardWrite"
