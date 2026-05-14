@@ -250,15 +250,24 @@ if (typeof document !== 'undefined') {
   // Load and display statistics
   async function loadStats() {
     try {
-      const data = await chrome.storage.local.get(['totalWatchTime', 'showMilliseconds', 'showIntervalTimer', 'dailyStats']);
+      const data = await chrome.storage.local.get([
+        'totalWatchTime', 'showMilliseconds', 'showIntervalTimer', 'dailyStats',
+        'showCopyBtn', 'showMsToggleBtn', 'showJumpBtn',
+      ]);
 
       const totalTime = data.totalWatchTime || 0;
       const showMilliseconds = data.showMilliseconds !== false;
       const showIntervalTimer = data.showIntervalTimer !== false;
+      const showCopyBtn = data.showCopyBtn !== false;
+      const showMsToggleBtn = data.showMsToggleBtn !== false;
+      const showJumpBtn = data.showJumpBtn !== false;
       const dailyStats = data.dailyStats || {};
 
       document.getElementById('showMilliseconds').checked = showMilliseconds;
       document.getElementById('showIntervalTimer').checked = showIntervalTimer;
+      document.getElementById('showCopyBtn').checked = showCopyBtn;
+      document.getElementById('showMsToggleBtn').checked = showMsToggleBtn;
+      document.getElementById('showJumpBtn').checked = showJumpBtn;
 
       // Wire up period tabs (once)
       document.querySelectorAll('.avg-tab').forEach(btn => {
@@ -294,6 +303,25 @@ if (typeof document !== 'undefined') {
     }
   });
 
+  // Reflect external changes (e.g. the in-player toggle button) in the popup checkbox
+  chrome.storage.onChanged.addListener((changes, namespace) => {
+    if (namespace !== 'local') return;
+    if (changes.showMilliseconds) {
+      const cb = document.getElementById('showMilliseconds');
+      if (cb) cb.checked = changes.showMilliseconds.newValue !== false;
+    }
+    if (changes.showIntervalTimer) {
+      const cb = document.getElementById('showIntervalTimer');
+      if (cb) cb.checked = changes.showIntervalTimer.newValue !== false;
+    }
+    ['showCopyBtn', 'showMsToggleBtn', 'showJumpBtn'].forEach((key) => {
+      if (changes[key]) {
+        const cb = document.getElementById(key);
+        if (cb) cb.checked = changes[key].newValue !== false;
+      }
+    });
+  });
+
   // Handle interval timer checkbox change
   document.getElementById('showIntervalTimer').addEventListener('change', async (e) => {
     try {
@@ -303,17 +331,38 @@ if (typeof document !== 'undefined') {
     }
   });
 
+  // Per-button visibility toggles
+  [
+    ['showCopyBtn', 'copy button'],
+    ['showMsToggleBtn', 'ms-toggle button'],
+    ['showJumpBtn', 'jump button'],
+  ].forEach(([id, label]) => {
+    document.getElementById(id).addEventListener('change', async (e) => {
+      try {
+        await chrome.storage.local.set({ [id]: e.target.checked });
+      } catch (error) {
+        console.error(`Error updating ${label} setting:`, error);
+      }
+    });
+  });
+
   // Reset statistics
   document.getElementById('resetBtn').addEventListener('click', async () => {
     if (confirm('Are you sure you want to reset all statistics?')) {
       try {
-        const currentSettings = await chrome.storage.local.get(['showMilliseconds', 'showIntervalTimer']);
+        const currentSettings = await chrome.storage.local.get([
+          'showMilliseconds', 'showIntervalTimer',
+          'showCopyBtn', 'showMsToggleBtn', 'showJumpBtn',
+        ]);
         await chrome.storage.local.clear();
         await chrome.storage.local.set({
           totalWatchTime: 0,
           dailyStats: {},
           showMilliseconds: currentSettings.showMilliseconds !== false,
-          showIntervalTimer: currentSettings.showIntervalTimer !== false
+          showIntervalTimer: currentSettings.showIntervalTimer !== false,
+          showCopyBtn: currentSettings.showCopyBtn !== false,
+          showMsToggleBtn: currentSettings.showMsToggleBtn !== false,
+          showJumpBtn: currentSettings.showJumpBtn !== false,
         });
         location.reload();
       } catch (error) {

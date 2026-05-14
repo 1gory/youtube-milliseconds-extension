@@ -1,3 +1,36 @@
+// Pure utility — parse timestamp string into seconds (Number), or null if invalid.
+// Supports: SS.mmm, M:SS, M:SS.mmm, H:MM:SS, H:MM:SS.mmm. Comma is treated as decimal separator.
+function parseTimestamp(input) {
+  if (typeof input !== 'string') return null;
+  const trimmed = input.trim().replace(',', '.');
+  if (trimmed === '') return null;
+
+  const parts = trimmed.split(':');
+  if (parts.length < 1 || parts.length > 3) return null;
+
+  const nums = [];
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    if (part === '' || !/^\d+(\.\d+)?$/.test(part)) return null;
+    const n = Number(part);
+    if (!Number.isFinite(n) || n < 0) return null;
+    // Non-leading groups must be < 60 (minutes/seconds)
+    if (i > 0 && n >= 60) return null;
+    nums.push(n);
+  }
+
+  let seconds;
+  if (nums.length === 1) {
+    seconds = nums[0];
+  } else if (nums.length === 2) {
+    seconds = nums[0] * 60 + nums[1];
+  } else {
+    seconds = nums[0] * 3600 + nums[1] * 60 + nums[2];
+  }
+
+  return seconds;
+}
+
 // Pure utility function — defined outside IIFE for testability
 function formatVideoTime(seconds, showMs) {
   if (showMs) {
@@ -33,8 +66,13 @@ if (typeof document !== 'undefined') {
   'use strict';
 
   let displayUpdateInterval;
+  let displayRafId = null;
+  let displayLoopMode = null; // 'raf' | 'interval' | null
   let timeTrackingInterval;
   let currentVideoElement;
+  let cachedTimeCurrentEl = null;
+  let cachedTimeDurationEl = null;
+  let isInternalTimeWrite = false;
   let lastTrackingTime = Date.now();
   let isVideoPlaying = false;
   let showMilliseconds = true;
@@ -48,6 +86,9 @@ if (typeof document !== 'undefined') {
   let intervalEndTime = null;
   let intervalKeyboardSetup = false;
   let showIntervalTimer = true;
+  let showCopyBtn = true;
+  let showMsToggleBtn = true;
+  let showJumpBtn = true;
 
   const COPY_ICON = `<svg viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
     <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/>
@@ -58,15 +99,33 @@ if (typeof document !== 'undefined') {
     <path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/>
   </svg>`;
 
+  // Clock face with three small digits — used by the milliseconds toggle button
+  const MS_TOGGLE_ICON = `<svg viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 1.5a5.5 5.5 0 1 1 0 11 5.5 5.5 0 0 1 0-11z"/>
+    <path d="M7.5 4a.5.5 0 0 1 .5.5V8h2.25a.5.5 0 0 1 0 1H7.5a.5.5 0 0 1-.5-.5v-4a.5.5 0 0 1 .5-.5z"/>
+    <text x="8" y="14.5" text-anchor="middle" font-size="4" font-family="monospace" font-weight="700">.ms</text>
+  </svg>`;
+
+  // Crosshair / target icon — used by the jump-to-timestamp button
+  const JUMP_ICON = `<svg viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <path d="M8 1a.5.5 0 0 1 .5.5v1.04a5.5 5.5 0 0 1 4.96 4.96H14.5a.5.5 0 0 1 0 1h-1.04a5.5 5.5 0 0 1-4.96 4.96V14.5a.5.5 0 0 1-1 0v-1.04A5.5 5.5 0 0 1 2.54 8.5H1.5a.5.5 0 0 1 0-1h1.04A5.5 5.5 0 0 1 7.5 2.54V1.5A.5.5 0 0 1 8 1zm0 2.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9zM8 6a2 2 0 1 1 0 4 2 2 0 0 1 0-4z"/>
+  </svg>`;
+
   // Load settings on startup
   loadSettings();
 
   async function loadSettings() {
     if (!chrome.runtime?.id) return;
     try {
-      const data = await chrome.storage.local.get(['showMilliseconds', 'showIntervalTimer']);
+      const data = await chrome.storage.local.get([
+        'showMilliseconds', 'showIntervalTimer',
+        'showCopyBtn', 'showMsToggleBtn', 'showJumpBtn',
+      ]);
       showMilliseconds = data.showMilliseconds !== false;
       showIntervalTimer = data.showIntervalTimer !== false;
+      showCopyBtn = data.showCopyBtn !== false;
+      showMsToggleBtn = data.showMsToggleBtn !== false;
+      showJumpBtn = data.showJumpBtn !== false;
       if (isInitialized) {
         updateDisplayMode();
       }
@@ -83,6 +142,7 @@ if (typeof document !== 'undefined') {
       showMilliseconds = changes.showMilliseconds.newValue;
       displayModeRetries = 0;
       updateDisplayMode();
+      updateMsToggleButtonState();
     }
 
     if (changes.showIntervalTimer) {
@@ -93,40 +153,117 @@ if (typeof document !== 'undefined') {
         teardownIntervalControls();
       }
     }
+
+    if (changes.showCopyBtn) {
+      showCopyBtn = changes.showCopyBtn.newValue !== false;
+      if (showCopyBtn) {
+        setupCopyButton();
+        // Other buttons anchor to the copy button — re-create them in correct order
+        setupMillisecondsToggleButton();
+        setupJumpControl();
+        setupIntervalControls();
+      } else {
+        document.querySelector('.ytp-copy-time-btn')?.remove();
+        // Re-anchor dependent buttons to .ytp-time-display
+        setupMillisecondsToggleButton();
+        setupJumpControl();
+        setupIntervalControls();
+      }
+    }
+
+    if (changes.showMsToggleBtn) {
+      showMsToggleBtn = changes.showMsToggleBtn.newValue !== false;
+      if (showMsToggleBtn) {
+        setupMillisecondsToggleButton();
+      } else {
+        document.querySelector('.ytp-ms-toggle-btn')?.remove();
+      }
+    }
+
+    if (changes.showJumpBtn) {
+      showJumpBtn = changes.showJumpBtn.newValue !== false;
+      if (showJumpBtn) {
+        setupJumpControl();
+      } else {
+        document.querySelector('.ytp-jump-btn')?.remove();
+        closeJumpInput();
+      }
+    }
   });
 
   let timeElementsObserver = null;
 
-  // Function to update time display
+  // Hot-path tick: only updates currentTime. Reads cached refs to avoid 3× querySelector per tick.
   function updateTimeDisplay() {
-    const video = document.querySelector('video');
-    if (!video) return;
+    const video = currentVideoElement;
+    const el = cachedTimeCurrentEl;
+    if (!video || !el || isNaN(video.currentTime)) return;
 
-    const currentTimeElement = document.querySelector('.ytp-time-current');
-    const durationElement = document.querySelector('.ytp-time-duration');
-
-    if (currentTimeElement && !isNaN(video.currentTime)) {
-      const text = formatVideoTime(video.currentTime, showMilliseconds);
-      if (currentTimeElement.textContent !== text) {
-        currentTimeElement.textContent = text;
-      }
-    }
-
-    if (durationElement && !isNaN(video.duration)) {
-      const text = formatVideoTime(video.duration, showMilliseconds);
-      if (durationElement.textContent !== text) {
-        durationElement.textContent = text;
-      }
+    const text = formatVideoTime(video.currentTime, showMilliseconds);
+    if (el.textContent !== text) {
+      isInternalTimeWrite = true;
+      el.textContent = text;
+      isInternalTimeWrite = false;
     }
   }
 
-  // Watch for YouTube overwriting our time elements and immediately restore our format
+  // Duration only changes at metadata load — no need to format it on every tick.
+  function updateDurationDisplay() {
+    const video = currentVideoElement || document.querySelector('video');
+    const el = cachedTimeDurationEl;
+    if (!video || !el || isNaN(video.duration)) return;
+
+    const text = formatVideoTime(video.duration, showMilliseconds);
+    if (el.textContent !== text) {
+      isInternalTimeWrite = true;
+      el.textContent = text;
+      isInternalTimeWrite = false;
+    }
+  }
+
+  // Watch for YouTube overwriting our time elements and immediately restore our format.
+  // We ignore our own writes via the isInternalTimeWrite flag.
   function observeTimeElements(currentTimeElement, durationElement) {
     if (timeElementsObserver) timeElementsObserver.disconnect();
 
-    timeElementsObserver = new MutationObserver(updateTimeDisplay);
+    timeElementsObserver = new MutationObserver(() => {
+      if (isInternalTimeWrite) return;
+      updateTimeDisplay();
+      updateDurationDisplay();
+    });
     timeElementsObserver.observe(currentTimeElement, { childList: true, characterData: true, subtree: true });
     timeElementsObserver.observe(durationElement,    { childList: true, characterData: true, subtree: true });
+  }
+
+  function stopDisplayLoop() {
+    if (displayUpdateInterval) {
+      clearInterval(displayUpdateInterval);
+      displayUpdateInterval = null;
+    }
+    if (displayRafId !== null) {
+      cancelAnimationFrame(displayRafId);
+      displayRafId = null;
+    }
+    displayLoopMode = null;
+  }
+
+  function startRafLoop() {
+    if (displayLoopMode === 'raf') return;
+    stopDisplayLoop();
+    displayLoopMode = 'raf';
+    const tick = () => {
+      if (displayLoopMode !== 'raf') return;
+      updateTimeDisplay();
+      displayRafId = requestAnimationFrame(tick);
+    };
+    displayRafId = requestAnimationFrame(tick);
+  }
+
+  function startIntervalLoop(ms) {
+    if (displayLoopMode === 'interval') return;
+    stopDisplayLoop();
+    displayLoopMode = 'interval';
+    displayUpdateInterval = setInterval(updateTimeDisplay, ms);
   }
 
   // Function to update display mode immediately
@@ -142,18 +279,17 @@ if (typeof document !== 'undefined') {
       return;
     }
     displayModeRetries = 0;
+    cachedTimeCurrentEl = currentTimeElement;
+    cachedTimeDurationEl = durationElement;
 
-    // Stop current interval first
-    if (displayUpdateInterval) {
-      clearInterval(displayUpdateInterval);
-      displayUpdateInterval = null;
-    }
+    stopDisplayLoop();
 
     if (showMilliseconds) {
       currentTimeElement.classList.add('ytp-time-milliseconds');
       durationElement.classList.add('ytp-time-milliseconds');
-      displayUpdateInterval = setInterval(updateTimeDisplay, 10);
       observeTimeElements(currentTimeElement, durationElement);
+      // rAF: tied to display refresh (≈60 Hz, 0 Hz when hidden), instead of a 100 Hz interval.
+      startRafLoop();
     } else {
       currentTimeElement.classList.remove('ytp-time-milliseconds');
       durationElement.classList.remove('ytp-time-milliseconds');
@@ -161,9 +297,12 @@ if (typeof document !== 'undefined') {
         timeElementsObserver.disconnect();
         timeElementsObserver = null;
       }
-      // Keep a slow interval — we own the textContent, YouTube won't update it reliably on its own
-      displayUpdateInterval = setInterval(updateTimeDisplay, 250);
+      // No ms — second-level precision is enough; a slow interval avoids unnecessary work.
+      startIntervalLoop(250);
     }
+
+    // Render duration once on mode change (was previously redone every tick).
+    updateDurationDisplay();
   }
 
   // Function to update watch time statistics
@@ -206,10 +345,7 @@ if (typeof document !== 'undefined') {
 
   // Function to stop all tracking
   function stopAllTracking() {
-    if (displayUpdateInterval) {
-      clearInterval(displayUpdateInterval);
-      displayUpdateInterval = null;
-    }
+    stopDisplayLoop();
     if (timeTrackingInterval) {
       clearInterval(timeTrackingInterval);
       timeTrackingInterval = null;
@@ -383,10 +519,161 @@ if (typeof document !== 'undefined') {
     }
   }
 
+  // Update visual state of the ms-toggle button to match current showMilliseconds value
+  function updateMsToggleButtonState() {
+    const btn = document.querySelector('.ytp-ms-toggle-btn');
+    if (!btn) return;
+    btn.classList.toggle('ytp-ms-toggle-btn--off', !showMilliseconds);
+    btn.title = showMilliseconds ? 'Hide milliseconds' : 'Show milliseconds';
+    btn.setAttribute('aria-pressed', String(showMilliseconds));
+  }
+
+  // Create and inject the milliseconds-toggle button into the player control bar
+  function setupMillisecondsToggleButton() {
+    document.querySelector('.ytp-ms-toggle-btn')?.remove();
+
+    if (!showMsToggleBtn) return;
+    if (window.location.pathname.startsWith('/shorts/')) return;
+
+    const anchor = document.querySelector('.ytp-copy-time-btn') || document.querySelector('.ytp-time-display');
+    if (!anchor) return;
+
+    const btn = document.createElement('button');
+    btn.className = 'ytp-ms-toggle-btn';
+    btn.setAttribute('aria-label', 'Toggle milliseconds display');
+    btn.innerHTML = MS_TOGGLE_ICON;
+
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!chrome.runtime?.id) return;
+      try {
+        const data = await chrome.storage.local.get(['showMilliseconds']);
+        const current = data.showMilliseconds !== false;
+        await chrome.storage.local.set({ showMilliseconds: !current });
+      } catch (err) {
+        console.error('Error toggling milliseconds:', err);
+      }
+    });
+
+    anchor.insertAdjacentElement('afterend', btn);
+    updateMsToggleButtonState();
+  }
+
+  // Apply parsed timestamp to the video. Clamps to [0, duration].
+  function applyJump(seconds) {
+    const video = document.querySelector('video');
+    if (!video || !Number.isFinite(video.duration)) return false;
+    const clamped = Math.max(0, Math.min(seconds, video.duration));
+    video.currentTime = clamped;
+    return true;
+  }
+
+  function closeJumpInput() {
+    const input = document.querySelector('.ytp-jump-input');
+    if (input) input.remove();
+  }
+
+  function openJumpInput() {
+    // Idempotent — close any previous one first
+    closeJumpInput();
+
+    if (window.location.pathname.startsWith('/shorts/')) return;
+
+    const videoContainer = document.querySelector('#movie_player') || document.querySelector('.html5-video-container');
+    if (!videoContainer) return;
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'ytp-jump-input';
+    input.setAttribute('aria-label', 'Jump to timestamp');
+    input.placeholder = 'H:MM:SS.mmm';
+    input.spellcheck = false;
+    input.autocomplete = 'off';
+
+    // Pre-fill with the current playback position so the user only edits the digits they care about
+    const video = document.querySelector('video');
+    if (video && Number.isFinite(video.currentTime)) {
+      input.value = formatVideoTime(video.currentTime, true);
+    }
+
+    const onKeyDown = (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const parsed = parseTimestamp(input.value);
+        if (parsed === null) {
+          input.classList.add('ytp-jump-input--error');
+          return;
+        }
+        if (applyJump(parsed)) closeJumpInput();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        closeJumpInput();
+      } else {
+        // Clear error state on subsequent typing
+        input.classList.remove('ytp-jump-input--error');
+      }
+    };
+
+    input.addEventListener('keydown', onKeyDown);
+    input.addEventListener('blur', () => {
+      // Defer so click handlers on the page still see the input briefly
+      setTimeout(closeJumpInput, 0);
+    });
+
+    videoContainer.appendChild(input);
+    input.focus();
+    input.select();
+  }
+
+  // Create and inject the jump-to-timestamp button into the player control bar
+  function setupJumpControl() {
+    document.querySelector('.ytp-jump-btn')?.remove();
+    closeJumpInput();
+
+    if (!showJumpBtn) return;
+    if (window.location.pathname.startsWith('/shorts/')) return;
+
+    const anchor = document.querySelector('.ytp-copy-time-btn') || document.querySelector('.ytp-time-display');
+    if (!anchor) return;
+
+    const btn = document.createElement('button');
+    btn.className = 'ytp-jump-btn';
+    btn.title = 'Jump to timestamp (g)';
+    btn.setAttribute('aria-label', 'Jump to timestamp');
+    btn.innerHTML = JUMP_ICON;
+
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openJumpInput();
+    });
+
+    anchor.insertAdjacentElement('afterend', btn);
+  }
+
+  let jumpKeyboardSetup = false;
+  function setupJumpKeyboardShortcut() {
+    if (jumpKeyboardSetup) return;
+    jumpKeyboardSetup = true;
+
+    document.addEventListener('keydown', (e) => {
+      if (!showJumpBtn) return;
+      if (e.key !== 'g' && e.key !== 'G') return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (['INPUT', 'TEXTAREA'].includes(e.target.tagName) || e.target.isContentEditable) return;
+      if (window.location.pathname.startsWith('/shorts/')) return;
+
+      e.preventDefault();
+      openJumpInput();
+    });
+  }
+
   // Create and inject the copy-timestamp button after .ytp-time-display
   function setupCopyButton() {
     // Remove stale button from previous page
     document.querySelector('.ytp-copy-time-btn')?.remove();
+
+    if (!showCopyBtn) return;
 
     const timeDisplay = document.querySelector('.ytp-time-display');
     if (!timeDisplay) return;
@@ -570,6 +857,9 @@ if (typeof document !== 'undefined') {
         currentVideoElement = video;
         isInitialized = true;
         initializationInProgress = false;
+        // Initialization succeeded — stop watching the entire body. yt-navigate-finish
+        // will trigger handleNavigation(), which re-arms this observer if needed.
+        if (bodyObserver) bodyObserver.disconnect();
 
         handleVideoEvents(video);
 
@@ -578,18 +868,21 @@ if (typeof document !== 'undefined') {
 
         startTimeTracking();
 
-        video.addEventListener('loadedmetadata', updateTimeDisplay);
+        video.addEventListener('loadedmetadata', updateDurationDisplay);
 
         // These are no-ops on Shorts (no .ytp-time-current / .ytp-time-display),
         // updateDisplayMode retries internally if elements aren't found yet
         updateDisplayMode();
         setupCopyButton();
+        setupMillisecondsToggleButton();
+        setupJumpControl();
         setupIntervalControls();
 
         if (!intervalKeyboardSetup) {
           setupIntervalKeyboardShortcuts();
           intervalKeyboardSetup = true;
         }
+        setupJumpKeyboardShortcut();
 
         console.log('YouTube Milliseconds Timer activated');
       }
@@ -601,20 +894,10 @@ if (typeof document !== 'undefined') {
     }, 10000);
   }
 
-  // Handle YouTube SPA navigation — YouTube fires this event on page transitions
-  function handleNavigation() {
-    isInitialized = false;
-    currentVideoElement = null;
-    intervalStartTime = null;
-    intervalEndTime = null;
-    stopAllTracking();
-    setTimeout(initializeExtension, 500);
-  }
-
-  window.addEventListener('yt-navigate-finish', handleNavigation);
-
-  // Fallback MutationObserver for edge cases where yt-navigate-finish doesn't fire
-  const observer = new MutationObserver((mutations) => {
+  // Fallback MutationObserver for edge cases where yt-navigate-finish doesn't fire.
+  // Active only between navigation and the next successful initialization — never
+  // attached during steady-state playback (when YouTube mutates the DOM most heavily).
+  const bodyObserver = new MutationObserver((mutations) => {
     if (isInitialized || initializationInProgress) return;
 
     const hasNewVideo = mutations.some(mutation =>
@@ -629,10 +912,29 @@ if (typeof document !== 'undefined') {
     }
   });
 
-  observer.observe(document.body, {
-    childList: true,
-    subtree: true
-  });
+  function armBodyObserver() {
+    bodyObserver.observe(document.body, { childList: true, subtree: true });
+  }
+
+  // Handle YouTube SPA navigation — YouTube fires this event on page transitions
+  function handleNavigation() {
+    isInitialized = false;
+    currentVideoElement = null;
+    cachedTimeCurrentEl = null;
+    cachedTimeDurationEl = null;
+    intervalStartTime = null;
+    intervalEndTime = null;
+    closeJumpInput();
+    stopAllTracking();
+    // Re-arm the fallback observer until the new page's video shows up
+    armBodyObserver();
+    setTimeout(initializeExtension, 500);
+  }
+
+  window.addEventListener('yt-navigate-finish', handleNavigation);
+
+  // Initial arm — disconnected by initializeExtension() once a video is found
+  armBodyObserver();
 
   // Initialize extension on page load
   if (document.readyState === 'loading') {
@@ -663,5 +965,5 @@ if (typeof document !== 'undefined') {
 
 // Export for testing in Node.js environment
 if (typeof module !== 'undefined') {
-  module.exports = { formatVideoTime };
+  module.exports = { formatVideoTime, parseTimestamp };
 }

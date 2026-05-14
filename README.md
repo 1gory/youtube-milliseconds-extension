@@ -9,13 +9,16 @@ Chrome extension that adds millisecond precision to YouTube video timestamps, an
 ## Screenshots
 <img src="screenshots/1.jpg" width="600" alt="Extension Preview">
 <img src="screenshots/2.jpg" width="600" alt="Extension Preview">
+<img src="screenshots/3.jpg" width="600" alt="Extension Preview">
 
 ## Features
 - Millisecond-accurate timestamps in M:SS.mmm format (e.g. 1:23.456)
 - One-click copy button next to the timestamp — copies the exact moment to clipboard
+- **Jump to timestamp** — press `g` (or click the target button), the input is pre-filled with the current time, edit and press Enter to jump with millisecond precision
+- **Milliseconds toggle button** in the player control bar — switch ms display on/off without opening the popup
 - Interval timer A→B — mark two points with `[` and `]` keys (or buttons), see the exact delta down to the millisecond, copy it with one click, visual markers on the progress bar
 - Watch time stats dashboard: total time, today, daily average (7d / 30d / all), 7-day bar chart, monthly calendar heatmap with month navigation
-- Toggle milliseconds and interval timer on/off via the extension popup
+- Per-button visibility controls — show only the player-bar buttons you actually use
 - Works with all YouTube videos, playlists, and Shorts
 - No overlays, no clutter — integrates directly into the native player
 
@@ -54,8 +57,10 @@ Chrome extension that adds millisecond precision to YouTube video timestamps, an
 ## Usage
 - **Timestamps**: Millisecond precision is shown automatically on all YouTube videos
 - **Copy button**: Click the clipboard icon next to the time to copy the exact timestamp
+- **Jump to timestamp**: Press `g` (or click the target button) — an input opens pre-filled with the current time. Edit the digits and press Enter to jump. `Esc` cancels
+- **Milliseconds toggle**: Click the clock-style button in the player control bar to hide/show milliseconds on the fly
 - **Interval timer**: Press `[` to set point A, `]` to set point B — or use the A/B buttons in the player. The delta appears above the controls
-- **Settings**: Click the extension icon to toggle features and view watch time stats
+- **Settings**: Click the extension icon to toggle features, hide individual buttons, and view watch time stats
 - **Time Tracking**: Only counts time when video is actively playing
 
 ## Development
@@ -73,7 +78,7 @@ npm test
 
 ### Package for Chrome Web Store
 ```bash
-zip -r youtube-milliseconds-v1.4.0.zip manifest.json popup.html popup.css styles.css js/ icons/
+zip -r youtube-milliseconds-v1.5.0.zip manifest.json popup.html popup.css styles.css js/ icons/
 ```
 
 The zip includes only the files required by the extension. Do **not** include `node_modules/`, `tests/`, screenshots, or any markdown files.

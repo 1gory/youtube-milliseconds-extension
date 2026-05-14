@@ -168,3 +168,108 @@
     pointer-events: none;
     z-index: 20;
 }
+
+/* Milliseconds toggle button in control bar */
+.ytp-ms-toggle-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0 5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 255, 255, 0.75);
+    transition: color 0.15s, opacity 0.15s;
+    vertical-align: middle;
+    height: 100%;
+    outline: none;
+    flex-shrink: 0;
+}
+
+.ytp-ms-toggle-btn:hover {
+    color: #fff;
+}
+
+.ytp-ms-toggle-btn:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.5);
+    border-radius: 3px;
+}
+
+.ytp-ms-toggle-btn svg {
+    width: 13px;
+    height: 13px;
+    display: block;
+    pointer-events: none;
+}
+
+.ytp-ms-toggle-btn--off {
+    opacity: 0.45;
+}
+
+/* Jump-to-timestamp button in control bar */
+.ytp-jump-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0 5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 255, 255, 0.75);
+    transition: color 0.15s;
+    vertical-align: middle;
+    height: 100%;
+    outline: none;
+    flex-shrink: 0;
+}
+
+.ytp-jump-btn:hover {
+    color: #fff;
+}
+
+.ytp-jump-btn:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.5);
+    border-radius: 3px;
+}
+
+.ytp-jump-btn svg {
+    width: 13px;
+    height: 13px;
+    display: block;
+    pointer-events: none;
+}
+
+/* Inline input for entering a timestamp */
+.ytp-jump-input {
+    position: absolute;
+    bottom: 52px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 110;
+    width: 180px;
+    padding: 6px 10px;
+    background: rgba(0, 0, 0, 0.85);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    border-radius: 4px;
+    font-family: 'Roboto Mono', 'Courier New', monospace;
+    font-size: 14px;
+    line-height: 1.3;
+    outline: none;
+    pointer-events: all;
+    caret-color: #fff;
+    text-align: center;
+}
+
+.ytp-jump-input::placeholder {
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.ytp-jump-input:focus {
+    border-color: rgba(255, 255, 255, 0.7);
+}
+
+.ytp-jump-input--error {
+    border-color: #ef4444;
+    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.25);
+}
