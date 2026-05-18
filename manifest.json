@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "YouTube Milliseconds Timer",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "Millisecond timestamps, jump-to-timestamp, interval timer A→B, ms toggle button, one-click copy, watch time stats",
   "permissions": [
     "storage",

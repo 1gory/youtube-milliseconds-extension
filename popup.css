@@ -415,6 +415,22 @@ body {
     border-top: 1px solid var(--border);
 }
 
+.feedback {
+    margin: 0 0 12px;
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.45;
+}
+
+.feedback a {
+    color: var(--accent);
+    text-decoration: none;
+}
+
+.feedback a:hover {
+    text-decoration: underline;
+}
+
 #resetBtn {
     background-color: var(--accent);
     color: white;
