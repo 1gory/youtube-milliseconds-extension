@@ -1,7 +1,7 @@
 {
   "name": "youtube-milliseconds-extension",
-  "version": "1.5.0",
-  "description": "Adds millisecond precision to YouTube video timestamps, copy any moment with one click, and track total watch time",
+  "version": "1.5.1",
+  "description": "Millisecond timestamps, jump-to-timestamp, interval timer A→B, ms toggle button, one-click copy, watch time stats",
   "scripts": {
     "test": "jest"
   },
