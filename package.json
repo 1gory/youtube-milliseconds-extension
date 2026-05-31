@@ -1,6 +1,6 @@
 {
   "name": "youtube-milliseconds-extension",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "description": "Millisecond timestamps, jump-to-timestamp, interval timer A→B, ms toggle button, one-click copy, watch time stats",
   "scripts": {
     "test": "jest"

@@ -2,7 +2,7 @@
 // Supports: SS.mmm, M:SS, M:SS.mmm, H:MM:SS, H:MM:SS.mmm. Comma is treated as decimal separator.
 function parseTimestamp(input) {
   if (typeof input !== 'string') return null;
-  const trimmed = input.trim().replace(',', '.');
+  const trimmed = input.trim().replace(/,/g, '.');
   if (trimmed === '') return null;
 
   const parts = trimmed.split(':');
@@ -868,7 +868,7 @@ if (typeof document !== 'undefined') {
 
         startTimeTracking();
 
-        video.addEventListener('loadedmetadata', updateDurationDisplay);
+        video.addEventListener('loadedmetadata', updateDurationDisplay, { signal: videoAbortController.signal });
 
         // These are no-ops on Shorts (no .ytp-time-current / .ytp-time-display),
         // updateDisplayMode retries internally if elements aren't found yet
@@ -883,8 +883,6 @@ if (typeof document !== 'undefined') {
           intervalKeyboardSetup = true;
         }
         setupJumpKeyboardShortcut();
-
-        console.log('YouTube Milliseconds Timer activated');
       }
     }, 100);
 

@@ -94,6 +94,27 @@ describe('parseTimestamp — invalid input', () => {
   });
 });
 
+describe('parseTimestamp — comma decimal separator (replace-all regression)', () => {
+  // Locks in the fix changing .replace(',', '.') → .replace(/,/g, '.').
+  // A single comma is a valid decimal separator; multiple commas are invalid
+  // (would previously leave a stray comma, but must resolve to null either way).
+  test('single comma parses as decimal', () => {
+    expect(parseTimestamp('1,5')).toBeCloseTo(1.5, 5);
+    expect(parseTimestamp('5,500')).toBeCloseTo(5.5, 5);
+  });
+
+  test('comma decimal in M:SS form', () => {
+    expect(parseTimestamp('1:2,5')).toBeCloseTo(62.5, 5);
+    expect(parseTimestamp('1:01,123')).toBeCloseTo(61.123, 5);
+  });
+
+  test('multiple commas are invalid', () => {
+    expect(parseTimestamp('1,2,3')).toBeNull();
+    expect(parseTimestamp('1,2,3,4')).toBeNull();
+    expect(parseTimestamp('1:2,3,4')).toBeNull();
+  });
+});
+
 describe('applyJump clamp semantics (pure logic)', () => {
   // Mirrors the clamp performed inside applyJump():
   //   clamped = Math.max(0, Math.min(seconds, duration))

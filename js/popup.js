@@ -29,6 +29,31 @@ function getLast7Days() {
   return days;
 }
 
+// Calculate daily average for the selected period.
+// Fixed windows (7d/30d) divide by the full window length so "7-day average"
+// means watch-time-per-day across the last 7 days (days with no activity count
+// as zero). The all-time average divides by days that actually have data.
+function calcAvg(dailyStats, period) {
+  let dates;
+  let divisor;
+  if (period === '7d') {
+    dates = getLast7Days();
+    divisor = dates.length;
+  } else if (period === '30d') {
+    dates = Array.from({ length: 30 }, (_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - (29 - i));
+      return getLocalDateString(d);
+    });
+    divisor = dates.length;
+  } else {
+    dates = Object.keys(dailyStats);
+    divisor = dates.filter(d => (dailyStats[d] || 0) > 0).length;
+  }
+  const sum = dates.reduce((acc, d) => acc + (dailyStats[d] || 0), 0);
+  return sum / Math.max(divisor, 1);
+}
+
 // Format total watch time for display (days, hours, minutes, seconds)
 function formatWatchTime(totalSeconds) {
   const years = Math.floor(totalSeconds / (365 * 24 * 3600));
@@ -70,25 +95,6 @@ if (typeof document !== 'undefined') {
     } catch (error) {
       console.error('Error updating counters:', error);
     }
-  }
-
-  // Calculate daily average for the selected period
-  function calcAvg(dailyStats, period) {
-    let dates;
-    if (period === '7d') {
-      dates = getLast7Days();
-    } else if (period === '30d') {
-      dates = Array.from({ length: 30 }, (_, i) => {
-        const d = new Date();
-        d.setDate(d.getDate() - (29 - i));
-        return getLocalDateString(d);
-      });
-    } else {
-      dates = Object.keys(dailyStats);
-    }
-    const daysWithData = dates.filter(d => (dailyStats[d] || 0) > 0);
-    const sum = daysWithData.reduce((acc, d) => acc + dailyStats[d], 0);
-    return sum / Math.max(daysWithData.length, 1);
   }
 
   function updateAvg() {
@@ -386,5 +392,5 @@ if (typeof document !== 'undefined') {
 
 // Export for testing in Node.js environment
 if (typeof module !== 'undefined') {
-  module.exports = { formatWatchTime };
+  module.exports = { formatWatchTime, calcAvg, getLast7Days, getLocalDateString };
 }
