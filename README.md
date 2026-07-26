@@ -2,9 +2,9 @@
 
 Chrome extension that adds millisecond precision to YouTube video timestamps, an interval timer A→B, one-click copy, and a watch time stats dashboard.
 
-[<img src="https://raw.githubusercontent.com/1gory/youtube-milliseconds-extension/main/docs/chrome-webstore-badge.png" alt="Available in the Chrome Web Store" height="58">](https://chromewebstore.google.com/detail/youtube-milliseconds-time/bchlendkhiidadpakkfgnpeklmifffcp)
+**[Available in the Chrome Web Store](https://chromewebstore.google.com/detail/youtube-milliseconds-time/bchlendkhiidadpakkfgnpeklmifffcp)**
 
-**[Website](https://1gory.github.io/youtube-milliseconds-extension/)** &nbsp;·&nbsp; **[Privacy Policy](https://1gory.github.io/youtube-milliseconds-extension/privacy-policy.html)**
+**[Website](https://ipershin.me/youtube-milliseconds-timer/)** &nbsp;·&nbsp; **[Privacy Policy](https://ipershin.me/youtube-milliseconds-timer/privacy/)**
 
 ## Screenshots
 <img src="screenshots/1.jpg" width="600" alt="Extension Preview">
@@ -78,7 +78,8 @@ npm test
 
 ### Package for Chrome Web Store
 ```bash
-zip -r youtube-milliseconds-v1.5.0.zip manifest.json popup.html popup.css styles.css js/ icons/
+VERSION=$(grep '"version"' manifest.json | head -1 | sed 's/.*"\([0-9.]*\)".*/\1/')
+zip -r youtube-milliseconds-v${VERSION}.zip manifest.json popup.html popup.css styles.css js/ icons/
 ```
 
 The zip includes only the files required by the extension. Do **not** include `node_modules/`, `tests/`, screenshots, or any markdown files.
@@ -86,7 +87,7 @@ The zip includes only the files required by the extension. Do **not** include `n
 ## Privacy
 This extension does not collect any personal data. All statistics are stored locally on your device and never transmitted externally.
 
-Full privacy policy: https://1gory.github.io/youtube-milliseconds-extension/privacy-policy.html
+Full privacy policy: https://ipershin.me/youtube-milliseconds-timer/privacy/
 
 ## License
 [MIT](LICENSE) © Igor Pershin

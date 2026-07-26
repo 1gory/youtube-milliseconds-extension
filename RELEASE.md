@@ -25,7 +25,8 @@ drift apart easily, and nothing breaks loudly when they do.
 ### 1. Versions match
 - [ ] Bump `manifest.json` → `"version"`
 - [ ] Bump `package.json` → `"version"` to the **same** value
-- [ ] `grep '"version"' manifest.json package.json` — confirm they agree
+- [ ] Bump `package-lock.json` → both top-level `"version"` fields (lines 3 and 9)
+- [ ] `grep -m3 '"version"' manifest.json package.json package-lock.json` — confirm they agree
 
 ### 2. Pre-flight
 - [ ] All feature work merged into `main`
@@ -60,21 +61,21 @@ For every screenshot in `screenshots/`:
 - [ ] If you do not update README in the same PR, open a follow-up and link
       it from the release notes — do not silently skip.
 
-### 6. GitHub Pages (docs/)
-The project ships a landing page from the `docs/` folder on `main`
-(GitHub Pages → Settings → Pages → source: `main` / `/docs`). It lives outside
-the extension code and nothing breaks if it goes stale — so it gets forgotten.
+### 6. Landing page (ipershin.me)
+The landing and privacy pages no longer live in this repo — `docs/` was removed
+in 8ddfc33 and the canonical pages moved to
+`https://ipershin.me/youtube-milliseconds-timer/`. They live in a different
+repo entirely, so nothing here breaks when they go stale — same drift trap as
+before, just further away.
 
-- [ ] Open `docs/index.html`. Audit the **feature cards** and the **tagline**
-      against the current `store-listing.md` — every user-visible feature this
-      release touched (jump-to-timestamp, interval A→B, toolbar customization,
-      stats…) must be reflected. Same drift trap as the README.
-- [ ] Update `docs/icon128.png` if the icon changed.
-- [ ] If the Chrome Web Store listing URL or slug changed, fix the CWS links
-      in both `docs/index.html` and `docs/privacy-policy.html`.
-- [ ] If the privacy policy text changed, mirror it in `docs/privacy-policy.html`.
-- [ ] After push, open `https://1gory.github.io/youtube-milliseconds-extension/`
-      and confirm the page reflects this release.
+- [ ] Audit the **feature list** and the **tagline** on
+      `https://ipershin.me/youtube-milliseconds-timer/` against the current
+      `store-listing.md` — every user-visible feature this release touched
+      (jump-to-timestamp, interval A→B, toolbar customization, stats…) must be
+      reflected.
+- [ ] If the privacy policy text changed, mirror it at
+      `https://ipershin.me/youtube-milliseconds-timer/privacy/`.
+- [ ] Confirm `README.md` still points at both URLs (not the dead github.io ones).
 
 ### 7. ai-tasks/
 - [ ] If this release implements or closes anything tracked in `ai-tasks/`,
@@ -165,3 +166,11 @@ add to it after each release.
   `store-listing.md` every release.
 - **1.5.1** — `manifest.json` shipped at 1.5.1 while `package.json` was still
   at 1.5.0. Lesson: step 1 makes the two-number match the very first thing.
+- **1.5.2 → 1.6.0** — removing `docs/` (8ddfc33) left the README pointing at a
+  deleted badge image and at two dead `github.io` URLs, and left step 6 of this
+  checklist describing a folder that no longer exists. Lesson: when a directory
+  is deleted, grep the repo for its path *and* re-read this file — the checklist
+  itself is one of the things that drifts.
+- **1.5.2 → 1.6.0** — `package-lock.json` had been stuck at 1.2.1 for six
+  releases because step 1 only mentions `manifest.json` and `package.json`.
+  It does not ship in the ZIP, so nothing ever complained.

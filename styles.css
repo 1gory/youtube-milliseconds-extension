@@ -9,14 +9,32 @@
     text-align: left !important;
 }
 
-/* Increase time container width to accommodate milliseconds (including H:MM:SS.mmm) */
-.ytp-time-display {
+/* Increase time container width to accommodate milliseconds (including H:MM:SS.mmm).
+   Scoped to the --ms modifier: applying it unconditionally left a dead 175px gap
+   in the control bar for users who turned milliseconds off, and on every inline
+   preview player across the site. */
+.ytp-time-display--ms {
     min-width: 175px !important;
 }
 
-/* Additional styles for better readability */
-.ytp-time-current, .ytp-time-duration {
-    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7) !important;
+/* Legibility over bright video content.
+   YouTube's bottom gradient scrim is thin, so white-on-white footage leaves the
+   readout and our injected controls almost invisible. A tight dark halo reads as
+   a contour without darkening the icon itself — deliberately understated so it
+   stays invisible against the usual dark scrim. */
+.ytp-time-current,
+.ytp-time-duration {
+    text-shadow: 0 0 2px rgba(0, 0, 0, 0.85), 1px 1px 2px rgba(0, 0, 0, 0.6) !important;
+}
+
+.ytp-copy-time-btn svg,
+.ytp-ms-toggle-btn svg,
+.ytp-jump-btn svg {
+    filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.9)) drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.5));
+}
+
+.ytp-interval-btn {
+    text-shadow: 0 0 2px rgba(0, 0, 0, 0.9), 0 1px 2px rgba(0, 0, 0, 0.6);
 }
 
 /* Copy timestamp button */
@@ -154,6 +172,9 @@
     width: 2px;
     height: 100%;
     background: rgba(255, 255, 255, 0.9);
+    /* Same contour trick as the control-bar icons — a white 2px line vanishes
+       against the light-grey unbuffered part of the progress bar. */
+    box-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
     pointer-events: none;
     z-index: 30;
     transform: translateX(-50%);

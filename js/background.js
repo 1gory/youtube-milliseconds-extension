@@ -42,7 +42,13 @@ if (typeof chrome !== 'undefined') {
   // Handle messages from content script
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'UPDATE_WATCH_TIME') {
-      updateWatchTime(message.seconds)
+      const seconds = Number(message.seconds);
+      if (!Number.isFinite(seconds) || seconds <= 0) {
+        sendResponse({ success: false });
+        return false;
+      }
+
+      updateWatchTime(seconds)
         .then(() => sendResponse({ success: true }))
         .catch((error) => {
           console.error('Error updating watch time:', error);
@@ -53,23 +59,36 @@ if (typeof chrome !== 'undefined') {
     }
   });
 
-  // Async function to update watch time
-  async function updateWatchTime(seconds) {
-    try {
-      const data = await chrome.storage.local.get(['totalWatchTime', 'dailyStats']);
-      const newTotal = accumulateWatchTime(data.totalWatchTime, seconds);
+  // Every YouTube tab reports independently, so the read-modify-write below
+  // must not interleave — two tabs reporting at the same moment would each read
+  // the same total and one write would silently overwrite the other. Chaining
+  // onto a single promise serialises all updates within the service worker.
+  let writeChain = Promise.resolve();
 
-      const dailyStats = data.dailyStats || {};
-      const today = getLocalDateString(new Date());
-      dailyStats[today] = (dailyStats[today] || 0) + seconds;
+  function enqueueWrite(task) {
+    const result = writeChain.then(task, task);
+    writeChain = result.catch(() => {});
+    return result;
+  }
 
-      await chrome.storage.local.set({
-        totalWatchTime: newTotal,
-        dailyStats
-      });
-    } catch (error) {
-      throw new Error('Failed to update watch time: ' + error.message);
-    }
+  function updateWatchTime(seconds) {
+    return enqueueWrite(async () => {
+      try {
+        const data = await chrome.storage.local.get(['totalWatchTime', 'dailyStats']);
+        const newTotal = accumulateWatchTime(data.totalWatchTime, seconds);
+
+        const dailyStats = data.dailyStats || {};
+        const today = getLocalDateString(new Date());
+        dailyStats[today] = (dailyStats[today] || 0) + seconds;
+
+        await chrome.storage.local.set({
+          totalWatchTime: newTotal,
+          dailyStats
+        });
+      } catch (error) {
+        throw new Error('Failed to update watch time: ' + error.message);
+      }
+    });
   }
 
 } // end browser-only block

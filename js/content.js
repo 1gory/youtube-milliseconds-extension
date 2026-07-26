@@ -31,6 +31,23 @@ function parseTimestamp(input) {
   return seconds;
 }
 
+// Pure utility — how many seconds of a sampling window actually count as "watched".
+//
+// Wall-clock time alone over-counts (machine sleep, stalled buffering) and media
+// progress alone over-counts (forward seeks), so each bounds the other:
+//   • elapsed 60 s / media 60 s  (background tab, throttled timer) → 60
+//   • elapsed 3600 s / media 0 s (laptop asleep)                   → 0
+//   • elapsed 1 s / media 600 s  (seek forward 10 min)             → 1
+// Media progress is divided by playbackRate so 2× playback still counts real seconds.
+function computeWatchedSeconds(elapsedSeconds, mediaDeltaSeconds, playbackRate, maxSample) {
+  if (!Number.isFinite(elapsedSeconds) || !Number.isFinite(mediaDeltaSeconds)) return 0;
+  const rate = Number.isFinite(playbackRate) && playbackRate > 0 ? playbackRate : 1;
+  const played = Math.max(0, mediaDeltaSeconds) / rate;
+  const counted = Math.min(elapsedSeconds, played);
+  if (!(counted > 0)) return 0;
+  return Math.min(counted, maxSample);
+}
+
 // Pure utility function — defined outside IIFE for testability
 function formatVideoTime(seconds, showMs) {
   if (showMs) {
@@ -65,26 +82,53 @@ if (typeof document !== 'undefined') {
 (function() {
   'use strict';
 
-  let displayUpdateInterval;
+  // ---------------------------------------------------------------- constants
+  const MAX_DISPLAY_MODE_RETRIES = 50;   // × 100 ms = 5 s max wait for player DOM
+  const PLAYER_POLL_MS = 100;
+  const PLAYER_POLL_TIMEOUT_MS = 10000;
+  const NO_MS_TICK_MS = 250;             // second-level precision needs no rAF
+  const WATCH_FLUSH_MS = 5000;           // batch watch-time IPC instead of 1 msg/s
+  const MAX_TICK_SECONDS = 300;          // hard ceiling on a single accepted sample
+  const NAV_POLL_MS = 1000;              // fallback SPA-navigation detection
+
+  // ------------------------------------------------------------ display state
+  let displayUpdateInterval = null;
   let displayRafId = null;
-  let displayLoopMode = null; // 'raf' | 'interval' | null
-  let timeTrackingInterval;
-  let currentVideoElement;
-  let cachedTimeCurrentEl = null;
-  let cachedTimeDurationEl = null;
-  let isInternalTimeWrite = false;
-  let lastTrackingTime = Date.now();
-  let isVideoPlaying = false;
-  let showMilliseconds = true;
+  let displayLoopMode = null;            // 'raf' | 'interval' | null
+  let displayModeTimeout = null;
+  let displayModeRetries = 0;
+
+  // --------------------------------------------------------------- init state
+  let playerCheckInterval = null;
+  let playerCheckTimeout = null;
+  let initRetryTimeout = null;
   let isInitialized = false;
   let initializationInProgress = false;
-  let videoAbortController = null;
-  let displayModeRetries = 0;
-  const MAX_DISPLAY_MODE_RETRIES = 50; // 5 seconds max
+  let navEpoch = 0;                      // invalidates async work from a previous page
+  let lastHref = location.href;
 
+  // ------------------------------------------------------------ cached lookups
+  let currentVideoElement = null;
+  let cachedTimeCurrentEl = null;
+  let cachedTimeDurationEl = null;
+  let cachedTimeDisplayEl = null;
+  let cachedPlayerEl = null;
+
+  // --------------------------------------------------------- watch-time state
+  let timeTrackingInterval = null;
+  let lastTrackingTime = Date.now();
+  let lastMediaTime = 0;
+  let lastFlushTime = Date.now();
+  let pendingWatchSeconds = 0;
+  let isVideoPlaying = false;
+  let videoAbortController = null;
+
+  // ------------------------------------------------------------ interval A→B
   let intervalStartTime = null;
   let intervalEndTime = null;
-  let intervalKeyboardSetup = false;
+
+  // ----------------------------------------------------------------- settings
+  let showMilliseconds = true;
   let showIntervalTimer = true;
   let showCopyBtn = true;
   let showMsToggleBtn = true;
@@ -111,8 +155,12 @@ if (typeof document !== 'undefined') {
     <path d="M8 1a.5.5 0 0 1 .5.5v1.04a5.5 5.5 0 0 1 4.96 4.96H14.5a.5.5 0 0 1 0 1h-1.04a5.5 5.5 0 0 1-4.96 4.96V14.5a.5.5 0 0 1-1 0v-1.04A5.5 5.5 0 0 1 2.54 8.5H1.5a.5.5 0 0 1 0-1h1.04A5.5 5.5 0 0 1 7.5 2.54V1.5A.5.5 0 0 1 8 1zm0 2.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9zM8 6a2 2 0 1 1 0 4 2 2 0 0 1 0-4z"/>
   </svg>`;
 
-  // Load settings on startup
-  loadSettings();
+  const isShortsPage = () => window.location.pathname.startsWith('/shorts/');
+  const getVideo = () => currentVideoElement || document.querySelector('video');
+
+  // Settings are loaded once up front; UI setup awaits this promise so that
+  // buttons the user disabled never flash on screen before being removed.
+  const settingsReady = loadSettings();
 
   async function loadSettings() {
     if (!chrome.runtime?.id) return;
@@ -126,108 +174,91 @@ if (typeof document !== 'undefined') {
       showCopyBtn = data.showCopyBtn !== false;
       showMsToggleBtn = data.showMsToggleBtn !== false;
       showJumpBtn = data.showJumpBtn !== false;
-      if (isInitialized) {
-        updateDisplayMode();
-      }
+      if (isInitialized) applyUiSettings();
     } catch (error) {
       console.error('Error loading settings:', error);
     }
   }
 
+  // Rebuild every piece of injected UI from the current settings.
+  // Cheap enough to run wholesale (settings changes are rare) and avoids the
+  // ordering bugs that per-key incremental updates kept reintroducing.
+  function applyUiSettings() {
+    displayModeRetries = 0;
+    updateDisplayMode();
+    setupCopyButton();
+    setupMillisecondsToggleButton();
+    setupJumpControl();
+    if (showIntervalTimer) {
+      setupIntervalControls();
+    } else {
+      teardownIntervalControls();
+    }
+  }
+
+  // Changing any of these means the set of injected buttons changes, so the
+  // whole control bar has to be rebuilt. Toggling milliseconds does not.
+  const LAYOUT_KEYS = ['showIntervalTimer', 'showCopyBtn', 'showMsToggleBtn', 'showJumpBtn'];
+
   // Listen for storage changes (when settings are updated from popup)
-  chrome.storage.onChanged.addListener((changes, namespace) => {
+  chrome.storage?.onChanged?.addListener((changes, namespace) => {
     if (namespace !== 'local') return;
 
-    if (changes.showMilliseconds) {
-      showMilliseconds = changes.showMilliseconds.newValue;
+    if (changes.showMilliseconds) showMilliseconds = changes.showMilliseconds.newValue !== false;
+    if (changes.showIntervalTimer) showIntervalTimer = changes.showIntervalTimer.newValue !== false;
+    if (changes.showCopyBtn) showCopyBtn = changes.showCopyBtn.newValue !== false;
+    if (changes.showMsToggleBtn) showMsToggleBtn = changes.showMsToggleBtn.newValue !== false;
+    if (changes.showJumpBtn) showJumpBtn = changes.showJumpBtn.newValue !== false;
+
+    if (LAYOUT_KEYS.some(key => key in changes)) {
+      if (!showJumpBtn) closeJumpInput();
+      applyUiSettings();
+    } else if (changes.showMilliseconds) {
+      // Targeted path: keeps keyboard focus on the in-player toggle button
+      // instead of destroying and recreating it on every click.
       displayModeRetries = 0;
       updateDisplayMode();
       updateMsToggleButtonState();
     }
-
-    if (changes.showIntervalTimer) {
-      showIntervalTimer = changes.showIntervalTimer.newValue;
-      if (showIntervalTimer) {
-        setupIntervalControls();
-      } else {
-        teardownIntervalControls();
-      }
-    }
-
-    if (changes.showCopyBtn) {
-      showCopyBtn = changes.showCopyBtn.newValue !== false;
-      if (showCopyBtn) {
-        setupCopyButton();
-        // Other buttons anchor to the copy button — re-create them in correct order
-        setupMillisecondsToggleButton();
-        setupJumpControl();
-        setupIntervalControls();
-      } else {
-        document.querySelector('.ytp-copy-time-btn')?.remove();
-        // Re-anchor dependent buttons to .ytp-time-display
-        setupMillisecondsToggleButton();
-        setupJumpControl();
-        setupIntervalControls();
-      }
-    }
-
-    if (changes.showMsToggleBtn) {
-      showMsToggleBtn = changes.showMsToggleBtn.newValue !== false;
-      if (showMsToggleBtn) {
-        setupMillisecondsToggleButton();
-      } else {
-        document.querySelector('.ytp-ms-toggle-btn')?.remove();
-      }
-    }
-
-    if (changes.showJumpBtn) {
-      showJumpBtn = changes.showJumpBtn.newValue !== false;
-      if (showJumpBtn) {
-        setupJumpControl();
-      } else {
-        document.querySelector('.ytp-jump-btn')?.remove();
-        closeJumpInput();
-      }
-    }
   });
 
   let timeElementsObserver = null;
+
+  // Single write path. Skipping equal text is what makes the whole thing safe:
+  // our own writes feed back into the MutationObserver below, and the second
+  // pass no-ops instead of looping.
+  //
+  // The previous `isInternalTimeWrite` flag could never work — it was set and
+  // cleared synchronously around the write, while MutationObserver callbacks
+  // are delivered as microtasks, i.e. always after the flag was already false.
+  function writeText(el, text) {
+    if (el.textContent === text) return;
+    el.textContent = text;
+  }
 
   // Hot-path tick: only updates currentTime. Reads cached refs to avoid 3× querySelector per tick.
   function updateTimeDisplay() {
     const video = currentVideoElement;
     const el = cachedTimeCurrentEl;
     if (!video || !el || isNaN(video.currentTime)) return;
-
-    const text = formatVideoTime(video.currentTime, showMilliseconds);
-    if (el.textContent !== text) {
-      isInternalTimeWrite = true;
-      el.textContent = text;
-      isInternalTimeWrite = false;
-    }
+    writeText(el, formatVideoTime(video.currentTime, showMilliseconds));
   }
 
   // Duration only changes at metadata load — no need to format it on every tick.
   function updateDurationDisplay() {
-    const video = currentVideoElement || document.querySelector('video');
+    const video = getVideo();
     const el = cachedTimeDurationEl;
-    if (!video || !el || isNaN(video.duration)) return;
-
-    const text = formatVideoTime(video.duration, showMilliseconds);
-    if (el.textContent !== text) {
-      isInternalTimeWrite = true;
-      el.textContent = text;
-      isInternalTimeWrite = false;
-    }
+    if (!video || !el || !Number.isFinite(video.duration)) return;
+    writeText(el, formatVideoTime(video.duration, showMilliseconds));
   }
 
-  // Watch for YouTube overwriting our time elements and immediately restore our format.
-  // We ignore our own writes via the isInternalTimeWrite flag.
+  // Watch for YouTube overwriting our time elements and immediately restore our
+  // format. Both handlers are idempotent, so re-entering on our own write costs
+  // one string compare and stops there.
   function observeTimeElements(currentTimeElement, durationElement) {
     if (timeElementsObserver) timeElementsObserver.disconnect();
 
     timeElementsObserver = new MutationObserver(() => {
-      if (isInternalTimeWrite) return;
       updateTimeDisplay();
       updateDurationDisplay();
     });
@@ -253,7 +284,12 @@ if (typeof document !== 'undefined') {
     displayLoopMode = 'raf';
     const tick = () => {
       if (displayLoopMode !== 'raf') return;
-      updateTimeDisplay();
+      // Controls faded out → the time text is invisible. Skipping the write
+      // avoids 60 style/layout invalidations per second for the common case of
+      // just watching a video. The next visible frame repaints it immediately.
+      if (!cachedPlayerEl || !cachedPlayerEl.classList.contains('ytp-autohide')) {
+        updateTimeDisplay();
+      }
       displayRafId = requestAnimationFrame(tick);
     };
     displayRafId = requestAnimationFrame(tick);
@@ -266,84 +302,150 @@ if (typeof document !== 'undefined') {
     displayUpdateInterval = setInterval(updateTimeDisplay, ms);
   }
 
-  // Function to update display mode immediately
+  // Pick the cheapest loop that still keeps the readout correct.
+  // Paused video: no loop at all — 'seeking'/'seeked'/'timeupdate' cover the
+  // only moments currentTime can change.
+  function syncDisplayLoop() {
+    if (!cachedTimeCurrentEl) return;
+    if (!isVideoPlaying) {
+      stopDisplayLoop();
+      updateTimeDisplay();
+      return;
+    }
+    if (showMilliseconds) {
+      startRafLoop();
+    } else {
+      startIntervalLoop(NO_MS_TICK_MS);
+    }
+  }
+
+  // Resolve the player DOM, apply the ms/no-ms mode and (re)start the loop.
   function updateDisplayMode() {
+    if (displayModeTimeout) {
+      clearTimeout(displayModeTimeout);
+      displayModeTimeout = null;
+    }
+
+    // Shorts has no time readout at all — skip the 5 s retry loop entirely.
+    if (isShortsPage()) return;
+
     const currentTimeElement = document.querySelector('.ytp-time-current');
     const durationElement = document.querySelector('.ytp-time-duration');
 
     if (!currentTimeElement || !durationElement) {
       if (displayModeRetries < MAX_DISPLAY_MODE_RETRIES) {
         displayModeRetries++;
-        setTimeout(updateDisplayMode, 100);
+        displayModeTimeout = setTimeout(updateDisplayMode, 100);
       }
       return;
     }
     displayModeRetries = 0;
     cachedTimeCurrentEl = currentTimeElement;
     cachedTimeDurationEl = durationElement;
+    cachedTimeDisplayEl = currentTimeElement.closest('.ytp-time-display');
+    cachedPlayerEl = document.querySelector('#movie_player');
 
     stopDisplayLoop();
 
     if (showMilliseconds) {
       currentTimeElement.classList.add('ytp-time-milliseconds');
       durationElement.classList.add('ytp-time-milliseconds');
+      // Widening .ytp-time-display is only correct in ms mode; keeping it
+      // unconditional left a dead gap in the control bar with ms turned off.
+      cachedTimeDisplayEl?.classList.add('ytp-time-display--ms');
       observeTimeElements(currentTimeElement, durationElement);
-      // rAF: tied to display refresh (≈60 Hz, 0 Hz when hidden), instead of a 100 Hz interval.
-      startRafLoop();
     } else {
       currentTimeElement.classList.remove('ytp-time-milliseconds');
       durationElement.classList.remove('ytp-time-milliseconds');
+      cachedTimeDisplayEl?.classList.remove('ytp-time-display--ms');
       if (timeElementsObserver) {
         timeElementsObserver.disconnect();
         timeElementsObserver = null;
       }
-      // No ms — second-level precision is enough; a slow interval avoids unnecessary work.
-      startIntervalLoop(250);
     }
 
-    // Render duration once on mode change (was previously redone every tick).
+    syncDisplayLoop();
     updateDurationDisplay();
   }
 
-  // Function to update watch time statistics
-  function updateWatchTime() {
+  function resetWatchSampling() {
+    lastTrackingTime = Date.now();
+    const video = currentVideoElement;
+    lastMediaTime = video && Number.isFinite(video.currentTime) ? video.currentTime : 0;
+  }
+
+  // ------------------------------------------------------------- watch time
+  // Sampled once a second (cheap, no IPC) but flushed to the service worker in
+  // batches — one message per 5 s instead of one per second keeps the worker
+  // from doing a storage read+write every second for every open YouTube tab.
+  //
+  // Each sample counts min(wall-clock elapsed, media time consumed). The two
+  // signals cross-check each other:
+  //   • machine sleep / stalled buffering → media time stands still, nothing counted
+  //   • forward seek → wall clock stays small, only real seconds counted
+  //   • background tab (setInterval throttled to ~1/min) → both agree at ~60 s,
+  //     so background playback is finally counted instead of being discarded by
+  //     the old "elapsed < 10" guard
+  function sampleWatchTime() {
     if (!isVideoPlaying) return;
 
     // chrome.runtime.id becomes undefined when the extension context is invalidated
     // (e.g. after a reload in dev mode). Stop all tracking to avoid repeated errors.
     if (!chrome.runtime?.id) {
+      pendingWatchSeconds = 0;
       stopAllTracking();
       return;
     }
 
+    const video = currentVideoElement;
     const now = Date.now();
     const elapsed = (now - lastTrackingTime) / 1000;
-
-    if (elapsed > 0 && elapsed < 10) {
-      try {
-        chrome.runtime.sendMessage({
-          type: 'UPDATE_WATCH_TIME',
-          seconds: elapsed
-        }).catch(() => {
-          // Ignore errors if background script is not ready
-        });
-      } catch {
-        stopAllTracking();
-      }
-    }
-
     lastTrackingTime = now;
+
+    if (!video || !Number.isFinite(video.currentTime)) return;
+
+    const mediaDelta = video.currentTime - lastMediaTime;
+    lastMediaTime = video.currentTime;
+
+    pendingWatchSeconds += computeWatchedSeconds(
+      elapsed, mediaDelta, video.playbackRate, MAX_TICK_SECONDS
+    );
+
+    if (now - lastFlushTime >= WATCH_FLUSH_MS) flushWatchTime();
   }
 
-  // Function to start time tracking
-  function startTimeTracking() {
-    if (timeTrackingInterval) {
-      clearInterval(timeTrackingInterval);
+  function flushWatchTime() {
+    lastFlushTime = Date.now();
+    if (pendingWatchSeconds <= 0) return;
+
+    if (!chrome.runtime?.id) {
+      pendingWatchSeconds = 0;
+      return;
     }
-    timeTrackingInterval = setInterval(updateWatchTime, 1000);
+
+    const seconds = pendingWatchSeconds;
+    pendingWatchSeconds = 0;
+    try {
+      chrome.runtime.sendMessage({ type: 'UPDATE_WATCH_TIME', seconds })
+        .catch(() => { /* background not ready — one batch lost, not worth retrying */ });
+    } catch {
+      stopAllTracking();
+    }
   }
 
-  // Function to stop all tracking
+  // Sample the tail of the current play span and push it out immediately.
+  function commitWatchTime() {
+    sampleWatchTime();
+    flushWatchTime();
+  }
+
+  function startTimeTracking() {
+    if (timeTrackingInterval) clearInterval(timeTrackingInterval);
+    lastFlushTime = Date.now();
+    resetWatchSampling();
+    timeTrackingInterval = setInterval(sampleWatchTime, 1000);
+  }
+
   function stopAllTracking() {
     stopDisplayLoop();
     if (timeTrackingInterval) {
@@ -352,36 +454,46 @@ if (typeof document !== 'undefined') {
     }
   }
 
-  // Function to handle video events — uses AbortController to prevent duplicate listeners
+  // Attach video listeners — AbortController guarantees the previous video's
+  // listeners are gone before new ones are added.
   function handleVideoEvents(video) {
-    if (videoAbortController) {
-      videoAbortController.abort();
-    }
+    if (videoAbortController) videoAbortController.abort();
     videoAbortController = new AbortController();
     const { signal } = videoAbortController;
 
     video.addEventListener('play', () => {
       isVideoPlaying = true;
-      lastTrackingTime = Date.now();
+      resetWatchSampling();
+      syncDisplayLoop();
     }, { signal });
 
-    video.addEventListener('pause', () => {
+    const onStop = () => {
       if (isVideoPlaying) {
-        updateWatchTime();
+        commitWatchTime();
         isVideoPlaying = false;
       }
-    }, { signal });
-
-    video.addEventListener('ended', () => {
-      if (isVideoPlaying) {
-        updateWatchTime();
-        isVideoPlaying = false;
-      }
-    }, { signal });
+      syncDisplayLoop();
+    };
+    video.addEventListener('pause', onStop, { signal });
+    video.addEventListener('ended', onStop, { signal });
 
     video.addEventListener('seeking', () => {
-      lastTrackingTime = Date.now();
+      // Re-baseline both clocks so the jump itself is never counted as watched.
+      resetWatchSampling();
+      if (!isVideoPlaying) updateTimeDisplay();
     }, { signal });
+
+    // While paused there is no loop running, so these are what keep the
+    // readout in sync with scrubbing and chapter jumps.
+    video.addEventListener('seeked', () => {
+      if (!isVideoPlaying) updateTimeDisplay();
+    }, { signal });
+    video.addEventListener('timeupdate', () => {
+      if (!isVideoPlaying) updateTimeDisplay();
+    }, { signal });
+
+    video.addEventListener('loadedmetadata', updateDurationDisplay, { signal });
+    video.addEventListener('durationchange', updateDurationDisplay, { signal });
   }
 
   // Fallback clipboard copy for browsers without navigator.clipboard
@@ -395,34 +507,46 @@ if (typeof document !== 'undefined') {
     document.body.removeChild(el);
   }
 
+  function copyToClipboard(text, onDone) {
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).then(onDone).catch(() => {
+        fallbackCopy(text);
+        onDone();
+      });
+    } else {
+      fallbackCopy(text);
+      onDone();
+    }
+  }
+
   // Update visual markers on the progress bar for interval points A and B
   function updateProgressMarkers() {
     const markerA = document.querySelector('.ytp-interval-marker-a');
     const markerB = document.querySelector('.ytp-interval-marker-b');
     const segment = document.querySelector('.ytp-interval-segment');
-    const video = document.querySelector('video');
+    const video = getVideo();
 
-    if (!markerA || !markerB || !segment || !video || isNaN(video.duration) || video.duration === 0) return;
+    // Live streams report Infinity — percentages would collapse to 0.
+    if (!markerA || !markerB || !segment || !video || !Number.isFinite(video.duration) || video.duration === 0) return;
 
-    if (intervalStartTime !== null) {
-      const posA = (intervalStartTime / video.duration) * 100;
+    const posA = intervalStartTime !== null ? (intervalStartTime / video.duration) * 100 : null;
+    const posB = intervalEndTime !== null ? (intervalEndTime / video.duration) * 100 : null;
+
+    if (posA !== null) {
       markerA.style.left = `${posA}%`;
       markerA.style.display = '';
     } else {
       markerA.style.display = 'none';
     }
 
-    if (intervalEndTime !== null) {
-      const posB = (intervalEndTime / video.duration) * 100;
+    if (posB !== null) {
       markerB.style.left = `${posB}%`;
       markerB.style.display = '';
     } else {
       markerB.style.display = 'none';
     }
 
-    if (intervalStartTime !== null && intervalEndTime !== null) {
-      const posA = (intervalStartTime / video.duration) * 100;
-      const posB = (intervalEndTime / video.duration) * 100;
+    if (posA !== null && posB !== null) {
       segment.style.left = `${Math.min(posA, posB)}%`;
       segment.style.width = `${Math.abs(posB - posA)}%`;
       segment.style.display = '';
@@ -441,11 +565,13 @@ if (typeof document !== 'undefined') {
     const timeDelta = badge.querySelector('[data-interval="delta"]');
     const copyBtn = badge.querySelector('.ytp-interval-copy-btn');
 
-    if (intervalStartTime !== null) {
+    // Show the badge as soon as either point is set — setting B first used to
+    // draw a progress marker with no visible readout anywhere.
+    if (intervalStartTime !== null || intervalEndTime !== null) {
       badge.classList.add('ytp-interval-badge--visible');
-      if (timeA) timeA.textContent = formatVideoTime(intervalStartTime, true);
     }
 
+    if (timeA) timeA.textContent = intervalStartTime !== null ? formatVideoTime(intervalStartTime, true) : '—';
     if (timeB) timeB.textContent = intervalEndTime !== null ? formatVideoTime(intervalEndTime, true) : '—';
 
     if (intervalStartTime !== null && intervalEndTime !== null) {
@@ -462,7 +588,7 @@ if (typeof document !== 'undefined') {
 
   // Record the current video position as interval start ('start') or end ('end')
   function setIntervalPoint(which) {
-    const video = document.querySelector('video');
+    const video = getVideo();
     if (!video) return;
 
     if (which === 'start') {
@@ -478,8 +604,7 @@ if (typeof document !== 'undefined') {
     intervalStartTime = null;
     intervalEndTime = null;
 
-    const badge = document.querySelector('.ytp-interval-badge');
-    if (badge) badge.classList.remove('ytp-interval-badge--visible');
+    document.querySelector('.ytp-interval-badge')?.classList.remove('ytp-interval-badge--visible');
 
     const markerA = document.querySelector('.ytp-interval-marker-a');
     const markerB = document.querySelector('.ytp-interval-marker-b');
@@ -493,30 +618,23 @@ if (typeof document !== 'undefined') {
   function copyIntervalDelta() {
     if (intervalStartTime === null || intervalEndTime === null) return;
 
-    const delta = Math.abs(intervalEndTime - intervalStartTime);
-    const deltaText = formatVideoTime(delta, true);
+    const deltaText = formatVideoTime(Math.abs(intervalEndTime - intervalStartTime), true);
+    const copyBtn = document.querySelector('.ytp-interval-badge .ytp-interval-copy-btn');
 
-    const badge = document.querySelector('.ytp-interval-badge');
-    const copyBtn = badge?.querySelector('.ytp-interval-copy-btn');
-
-    const showCopied = () => {
+    copyToClipboard(deltaText, () => {
       if (!copyBtn) return;
       clearTimeout(copyBtn._resetTimeout);
       copyBtn.textContent = '✓';
       copyBtn._resetTimeout = setTimeout(() => {
         copyBtn.textContent = '⎘';
       }, 1500);
-    };
+    });
+  }
 
-    if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(deltaText).then(showCopied).catch(() => {
-        fallbackCopy(deltaText);
-        showCopied();
-      });
-    } else {
-      fallbackCopy(deltaText);
-      showCopied();
-    }
+  // All injected control-bar buttons sit after the copy button when it exists,
+  // and fall back to the time display when the user has hidden it.
+  function getControlAnchor() {
+    return document.querySelector('.ytp-copy-time-btn') || document.querySelector('.ytp-time-display');
   }
 
   // Update visual state of the ms-toggle button to match current showMilliseconds value
@@ -532,10 +650,9 @@ if (typeof document !== 'undefined') {
   function setupMillisecondsToggleButton() {
     document.querySelector('.ytp-ms-toggle-btn')?.remove();
 
-    if (!showMsToggleBtn) return;
-    if (window.location.pathname.startsWith('/shorts/')) return;
+    if (!showMsToggleBtn || isShortsPage()) return;
 
-    const anchor = document.querySelector('.ytp-copy-time-btn') || document.querySelector('.ytp-time-display');
+    const anchor = getControlAnchor();
     if (!anchor) return;
 
     const btn = document.createElement('button');
@@ -547,9 +664,9 @@ if (typeof document !== 'undefined') {
       e.stopPropagation();
       if (!chrome.runtime?.id) return;
       try {
-        const data = await chrome.storage.local.get(['showMilliseconds']);
-        const current = data.showMilliseconds !== false;
-        await chrome.storage.local.set({ showMilliseconds: !current });
+        // Toggle against the in-memory value: it is already kept in sync by the
+        // storage listener, so an extra round-trip only adds latency.
+        await chrome.storage.local.set({ showMilliseconds: !showMilliseconds });
       } catch (err) {
         console.error('Error toggling milliseconds:', err);
       }
@@ -561,23 +678,24 @@ if (typeof document !== 'undefined') {
 
   // Apply parsed timestamp to the video. Clamps to [0, duration].
   function applyJump(seconds) {
-    const video = document.querySelector('video');
+    const video = getVideo();
     if (!video || !Number.isFinite(video.duration)) return false;
-    const clamped = Math.max(0, Math.min(seconds, video.duration));
-    video.currentTime = clamped;
+    video.currentTime = Math.max(0, Math.min(seconds, video.duration));
     return true;
   }
 
-  function closeJumpInput() {
+  function closeJumpInput(only) {
     const input = document.querySelector('.ytp-jump-input');
-    if (input) input.remove();
+    if (!input) return;
+    // `only` guards against a deferred blur handler killing the input that a
+    // subsequent click has just re-opened.
+    if (only && input !== only) return;
+    input.remove();
   }
 
   function openJumpInput() {
-    // Idempotent — close any previous one first
     closeJumpInput();
-
-    if (window.location.pathname.startsWith('/shorts/')) return;
+    if (isShortsPage()) return;
 
     const videoContainer = document.querySelector('#movie_player') || document.querySelector('.html5-video-container');
     if (!videoContainer) return;
@@ -591,12 +709,12 @@ if (typeof document !== 'undefined') {
     input.autocomplete = 'off';
 
     // Pre-fill with the current playback position so the user only edits the digits they care about
-    const video = document.querySelector('video');
+    const video = getVideo();
     if (video && Number.isFinite(video.currentTime)) {
       input.value = formatVideoTime(video.currentTime, true);
     }
 
-    const onKeyDown = (e) => {
+    input.addEventListener('keydown', (e) => {
       e.stopPropagation();
       if (e.key === 'Enter') {
         e.preventDefault();
@@ -605,20 +723,18 @@ if (typeof document !== 'undefined') {
           input.classList.add('ytp-jump-input--error');
           return;
         }
-        if (applyJump(parsed)) closeJumpInput();
+        if (applyJump(parsed)) closeJumpInput(input);
       } else if (e.key === 'Escape') {
         e.preventDefault();
-        closeJumpInput();
+        closeJumpInput(input);
       } else {
-        // Clear error state on subsequent typing
         input.classList.remove('ytp-jump-input--error');
       }
-    };
+    });
 
-    input.addEventListener('keydown', onKeyDown);
     input.addEventListener('blur', () => {
       // Defer so click handlers on the page still see the input briefly
-      setTimeout(closeJumpInput, 0);
+      setTimeout(() => closeJumpInput(input), 0);
     });
 
     videoContainer.appendChild(input);
@@ -629,12 +745,10 @@ if (typeof document !== 'undefined') {
   // Create and inject the jump-to-timestamp button into the player control bar
   function setupJumpControl() {
     document.querySelector('.ytp-jump-btn')?.remove();
-    closeJumpInput();
 
-    if (!showJumpBtn) return;
-    if (window.location.pathname.startsWith('/shorts/')) return;
+    if (!showJumpBtn || isShortsPage()) return;
 
-    const anchor = document.querySelector('.ytp-copy-time-btn') || document.querySelector('.ytp-time-display');
+    const anchor = getControlAnchor();
     if (!anchor) return;
 
     const btn = document.createElement('button');
@@ -651,26 +765,8 @@ if (typeof document !== 'undefined') {
     anchor.insertAdjacentElement('afterend', btn);
   }
 
-  let jumpKeyboardSetup = false;
-  function setupJumpKeyboardShortcut() {
-    if (jumpKeyboardSetup) return;
-    jumpKeyboardSetup = true;
-
-    document.addEventListener('keydown', (e) => {
-      if (!showJumpBtn) return;
-      if (e.key !== 'g' && e.key !== 'G') return;
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
-      if (['INPUT', 'TEXTAREA'].includes(e.target.tagName) || e.target.isContentEditable) return;
-      if (window.location.pathname.startsWith('/shorts/')) return;
-
-      e.preventDefault();
-      openJumpInput();
-    });
-  }
-
   // Create and inject the copy-timestamp button after .ytp-time-display
   function setupCopyButton() {
-    // Remove stale button from previous page
     document.querySelector('.ytp-copy-time-btn')?.remove();
 
     if (!showCopyBtn) return;
@@ -689,13 +785,11 @@ if (typeof document !== 'undefined') {
     btn.addEventListener('click', (e) => {
       e.stopPropagation(); // prevent triggering play/pause
 
-      const video = document.querySelector('video');
+      const video = getVideo();
       if (!video) return;
 
       // Always copy with full millisecond precision — that's the point
-      const timeText = formatVideoTime(video.currentTime, true);
-
-      const showCopied = () => {
+      copyToClipboard(formatVideoTime(video.currentTime, true), () => {
         clearTimeout(resetTimeout);
         btn.innerHTML = CHECK_ICON;
         btn.classList.add('ytp-copy-time-btn--copied');
@@ -703,17 +797,7 @@ if (typeof document !== 'undefined') {
           btn.innerHTML = COPY_ICON;
           btn.classList.remove('ytp-copy-time-btn--copied');
         }, 1500);
-      };
-
-      if (navigator.clipboard?.writeText) {
-        navigator.clipboard.writeText(timeText).then(showCopied).catch(() => {
-          fallbackCopy(timeText);
-          showCopied();
-        });
-      } else {
-        fallbackCopy(timeText);
-        showCopied();
-      }
+      });
     });
 
     timeDisplay.insertAdjacentElement('afterend', btn);
@@ -722,47 +806,26 @@ if (typeof document !== 'undefined') {
   // Remove all interval UI elements and reset state (used when feature is disabled)
   function teardownIntervalControls() {
     resetInterval();
-    document.querySelector('.ytp-interval-btn-a')?.remove();
-    document.querySelector('.ytp-interval-btn-b')?.remove();
-    document.querySelector('.ytp-interval-badge')?.remove();
-    document.querySelector('.ytp-interval-marker-a')?.remove();
-    document.querySelector('.ytp-interval-marker-b')?.remove();
-    document.querySelector('.ytp-interval-segment')?.remove();
-  }
-
-  // Register [ and ] keyboard shortcuts for setting interval points A and B
-  function setupIntervalKeyboardShortcuts() {
-    document.addEventListener('keydown', (e) => {
-      if (!showIntervalTimer) return;
-      if (['INPUT', 'TEXTAREA'].includes(e.target.tagName) || e.target.isContentEditable) return;
-
-      if (e.key === '[') {
-        e.preventDefault();
-        setIntervalPoint('start');
-      } else if (e.key === ']') {
-        e.preventDefault();
-        setIntervalPoint('end');
-      }
-    });
+    document.querySelectorAll(
+      '.ytp-interval-btn-a, .ytp-interval-btn-b, .ytp-interval-badge, ' +
+      '.ytp-interval-marker-a, .ytp-interval-marker-b, .ytp-interval-segment'
+    ).forEach(el => el.remove());
   }
 
   // Create and inject interval A/B buttons, the floating badge, and progress bar markers
   function setupIntervalControls() {
-    if (!showIntervalTimer) return;
+    // Remove stale elements from previous page / previous settings state
+    document.querySelectorAll(
+      '.ytp-interval-btn-a, .ytp-interval-btn-b, .ytp-interval-badge, ' +
+      '.ytp-interval-marker-a, .ytp-interval-marker-b, .ytp-interval-segment'
+    ).forEach(el => el.remove());
 
-    // Remove stale elements from previous page
-    document.querySelector('.ytp-interval-btn-a')?.remove();
-    document.querySelector('.ytp-interval-btn-b')?.remove();
-    document.querySelector('.ytp-interval-badge')?.remove();
-    document.querySelector('.ytp-interval-marker-a')?.remove();
-    document.querySelector('.ytp-interval-marker-b')?.remove();
-    document.querySelector('.ytp-interval-segment')?.remove();
+    if (!showIntervalTimer || isShortsPage()) return;
 
-    // Skip Shorts — same check as setupCopyButton
-    if (window.location.pathname.startsWith('/shorts/')) return;
-
-    const copyBtn = document.querySelector('.ytp-copy-time-btn');
-    if (!copyBtn) return;
+    // Anchoring to the copy button alone meant hiding the copy button silently
+    // killed the whole interval feature.
+    const anchor = getControlAnchor();
+    if (!anchor) return;
 
     const btnA = document.createElement('button');
     btnA.className = 'ytp-interval-btn ytp-interval-btn-a';
@@ -784,11 +847,10 @@ if (typeof document !== 'undefined') {
       setIntervalPoint('end');
     });
 
-    // Insert A then B after copyBtn → results in [copy][A][B]
-    copyBtn.insertAdjacentElement('afterend', btnB);
-    copyBtn.insertAdjacentElement('afterend', btnA);
+    // Insert A then B after the anchor → results in [anchor][A][B]
+    anchor.insertAdjacentElement('afterend', btnB);
+    anchor.insertAdjacentElement('afterend', btnA);
 
-    // Create floating badge
     const badge = document.createElement('div');
     badge.className = 'ytp-interval-badge';
     badge.innerHTML = `
@@ -819,11 +881,8 @@ if (typeof document !== 'undefined') {
     });
 
     const videoContainer = document.querySelector('#movie_player') || document.querySelector('.html5-video-container');
-    if (videoContainer) {
-      videoContainer.appendChild(badge);
-    }
+    if (videoContainer) videoContainer.appendChild(badge);
 
-    // Create progress bar markers and segment
     const progressBar = document.querySelector('.ytp-progress-bar');
     if (progressBar) {
       const segment = document.createElement('div');
@@ -842,126 +901,167 @@ if (typeof document !== 'undefined') {
       progressBar.appendChild(markerA);
       progressBar.appendChild(markerB);
     }
+
+    // Restore any points that survived a settings toggle
+    if (intervalStartTime !== null || intervalEndTime !== null) updateIntervalUI();
   }
 
-  // Function to initialize the extension
-  function initializeExtension() {
-    if (initializationInProgress) return;
-    initializationInProgress = true;
-
-    const checkForPlayer = setInterval(() => {
-      const video = document.querySelector('video');
-
-      if (video) {
-        clearInterval(checkForPlayer);
-        currentVideoElement = video;
-        isInitialized = true;
-        initializationInProgress = false;
-        // Initialization succeeded — stop watching the entire body. yt-navigate-finish
-        // will trigger handleNavigation(), which re-arms this observer if needed.
-        if (bodyObserver) bodyObserver.disconnect();
-
-        handleVideoEvents(video);
-
-        isVideoPlaying = !video.paused;
-        lastTrackingTime = Date.now();
-
-        startTimeTracking();
-
-        video.addEventListener('loadedmetadata', updateDurationDisplay, { signal: videoAbortController.signal });
-
-        // These are no-ops on Shorts (no .ytp-time-current / .ytp-time-display),
-        // updateDisplayMode retries internally if elements aren't found yet
-        updateDisplayMode();
-        setupCopyButton();
-        setupMillisecondsToggleButton();
-        setupJumpControl();
-        setupIntervalControls();
-
-        if (!intervalKeyboardSetup) {
-          setupIntervalKeyboardShortcuts();
-          intervalKeyboardSetup = true;
-        }
-        setupJumpKeyboardShortcut();
-      }
-    }, 100);
-
-    setTimeout(() => {
-      clearInterval(checkForPlayer);
-      initializationInProgress = false;
-    }, 10000);
-  }
-
-  // Fallback MutationObserver for edge cases where yt-navigate-finish doesn't fire.
-  // Active only between navigation and the next successful initialization — never
-  // attached during steady-state playback (when YouTube mutates the DOM most heavily).
-  const bodyObserver = new MutationObserver((mutations) => {
-    if (isInitialized || initializationInProgress) return;
-
-    const hasNewVideo = mutations.some(mutation =>
-      Array.from(mutation.addedNodes).some(node =>
-        node.nodeType === Node.ELEMENT_NODE &&
-        (node.querySelector?.('video') || node.tagName === 'VIDEO')
-      )
-    );
-
-    if (hasNewVideo) {
-      setTimeout(initializeExtension, 500);
+  // ----------------------------------------------------------- initialization
+  function clearInitTimers() {
+    if (playerCheckInterval) {
+      clearInterval(playerCheckInterval);
+      playerCheckInterval = null;
     }
-  });
+    if (playerCheckTimeout) {
+      clearTimeout(playerCheckTimeout);
+      playerCheckTimeout = null;
+    }
+  }
 
-  function armBodyObserver() {
-    bodyObserver.observe(document.body, { childList: true, subtree: true });
+  function initializeExtension() {
+    if (isInitialized || initializationInProgress) return;
+    initializationInProgress = true;
+    clearInitTimers();
+
+    playerCheckInterval = setInterval(() => {
+      const video = document.querySelector('video');
+      if (video) onPlayerFound(video);
+    }, PLAYER_POLL_MS);
+
+    playerCheckTimeout = setTimeout(() => {
+      clearInitTimers();
+      initializationInProgress = false;
+    }, PLAYER_POLL_TIMEOUT_MS);
+  }
+
+  async function onPlayerFound(video) {
+    clearInitTimers();
+    const epoch = navEpoch;
+
+    currentVideoElement = video;
+    isInitialized = true;
+    initializationInProgress = false;
+
+    handleVideoEvents(video);
+
+    isVideoPlaying = !video.paused;
+    startTimeTracking();
+
+    // Wait for stored settings before injecting anything, otherwise buttons the
+    // user turned off appear for a frame (or forever, if storage is slow).
+    await settingsReady;
+    if (epoch !== navEpoch) return;
+
+    // These are no-ops on Shorts (no .ytp-time-current / .ytp-time-display);
+    // updateDisplayMode retries internally if elements aren't found yet.
+    applyUiSettings();
   }
 
   // Handle YouTube SPA navigation — YouTube fires this event on page transitions
   function handleNavigation() {
+    navEpoch++;
+    lastHref = location.href;
+    commitWatchTime();
+
     isInitialized = false;
+    initializationInProgress = false;
+    isVideoPlaying = false;
+    clearInitTimers();
+    if (displayModeTimeout) {
+      clearTimeout(displayModeTimeout);
+      displayModeTimeout = null;
+    }
+    displayModeRetries = 0;
+
+    if (videoAbortController) {
+      videoAbortController.abort();
+      videoAbortController = null;
+    }
+    if (timeElementsObserver) {
+      timeElementsObserver.disconnect();
+      timeElementsObserver = null;
+    }
+
     currentVideoElement = null;
     cachedTimeCurrentEl = null;
     cachedTimeDurationEl = null;
-    intervalStartTime = null;
-    intervalEndTime = null;
+    cachedTimeDisplayEl = null;
+    cachedPlayerEl = null;
+    // YouTube reuses #movie_player across SPA transitions, so the previous
+    // page's badge and progress markers would otherwise stay on screen with
+    // stale timestamps until the new page finished initializing.
+    teardownIntervalControls();
     closeJumpInput();
     stopAllTracking();
-    // Re-arm the fallback observer until the new page's video shows up
-    armBodyObserver();
-    setTimeout(initializeExtension, 500);
+
+    clearTimeout(initRetryTimeout);
+    initRetryTimeout = setTimeout(initializeExtension, 500);
   }
 
   window.addEventListener('yt-navigate-finish', handleNavigation);
 
-  // Initial arm — disconnected by initializeExtension() once a video is found
-  armBodyObserver();
+  // Fallback for SPA transitions where yt-navigate-finish doesn't fire.
+  // A 1 s href comparison replaces the old MutationObserver on document.body:
+  // that observer ran a querySelector('video') over every added subtree, which
+  // on an infinite-scroll feed meant continuous work for no benefit.
+  setInterval(() => {
+    if (location.href === lastHref) return;
+    handleNavigation();
+  }, NAV_POLL_MS);
 
-  // Initialize extension on page load
+  // ------------------------------------------------------ keyboard shortcuts
+  const isTypingTarget = (target) =>
+    target instanceof Element &&
+    (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+
+  document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey || e.metaKey) return;
+    if (isTypingTarget(e.target)) return;
+    if (isShortsPage()) return;
+
+    // Alt is not excluded here: on several keyboard layouts the bracket keys
+    // are only reachable via AltGr, which reports altKey.
+    if (showIntervalTimer && (e.key === '[' || e.key === ']')) {
+      e.preventDefault();
+      setIntervalPoint(e.key === '[' ? 'start' : 'end');
+      return;
+    }
+
+    if (showJumpBtn && !e.altKey && (e.key === 'g' || e.key === 'G')) {
+      e.preventDefault();
+      openJumpInput();
+    }
+  });
+
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initializeExtension);
   } else {
     initializeExtension();
   }
 
-  // Cleanup on page unload
-  window.addEventListener('beforeunload', () => {
-    if (isVideoPlaying) {
-      updateWatchTime();
-    }
+  // pagehide is the reliable teardown hook; beforeunload does not fire on
+  // bfcache navigations or mobile tab eviction.
+  window.addEventListener('pagehide', () => {
+    commitWatchTime();
     stopAllTracking();
   });
 
-  // Handle visibility change
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden && isVideoPlaying) {
-      updateWatchTime();
-    } else if (!document.hidden && isVideoPlaying) {
-      lastTrackingTime = Date.now();
-    }
+  // Restored from the back/forward cache — pagehide already tore everything
+  // down, so rebuild from scratch instead of leaving a dead page behind.
+  window.addEventListener('pageshow', (e) => {
+    if (e.persisted) handleNavigation();
   });
+
+  // Flush in both directions: hiding pushes out what was watched so far, and
+  // becoming visible again closes the throttled background span. The media-time
+  // cross-check in sampleWatchTime() means the hidden span no longer has to be
+  // discarded wholesale.
+  document.addEventListener('visibilitychange', commitWatchTime);
 
 })();
 } // end browser-only block
 
 // Export for testing in Node.js environment
 if (typeof module !== 'undefined') {
-  module.exports = { formatVideoTime, parseTimestamp };
+  module.exports = { formatVideoTime, parseTimestamp, computeWatchedSeconds };
 }

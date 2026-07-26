@@ -75,26 +75,20 @@ function formatWatchTime(totalSeconds) {
 // Only run DOM setup in browser/extension context
 if (typeof document !== 'undefined') {
 
-  let updateInterval;
   let calendarOffset = 0;
   let cachedDailyStats = {};
+  let cachedTotalWatchTime = 0;
   let avgPeriod = '7d';
 
-  // Refresh all live counters (total, today, avg) from storage
-  async function updateCounters() {
-    try {
-      const data = await chrome.storage.local.get(['totalWatchTime', 'dailyStats']);
-      cachedDailyStats = data.dailyStats || {};
+  // Paint the counters from already-known values — no storage round-trip.
+  function renderCounters(totalWatchTime) {
+    if (totalWatchTime !== undefined) cachedTotalWatchTime = totalWatchTime || 0;
+    document.getElementById('totalTime').textContent = formatWatchTime(cachedTotalWatchTime);
 
-      document.getElementById('totalTime').textContent = formatWatchTime(data.totalWatchTime || 0);
+    const today = getLocalDateString(new Date());
+    document.getElementById('todayTime').textContent = formatShortTime(cachedDailyStats[today] || 0);
 
-      const today = getLocalDateString(new Date());
-      document.getElementById('todayTime').textContent = formatShortTime(cachedDailyStats[today] || 0);
-
-      updateAvg();
-    } catch (error) {
-      console.error('Error updating counters:', error);
-    }
+    updateAvg();
   }
 
   function updateAvg() {
@@ -287,12 +281,9 @@ if (typeof document !== 'undefined') {
 
       // Initial render of counters, chart, calendar
       cachedDailyStats = dailyStats;
-      await updateCounters();
+      renderCounters(totalTime);
       renderChart(dailyStats);
       renderCalendar(dailyStats, calendarOffset);
-
-      // Keep all counters in sync every second
-      updateInterval = setInterval(updateCounters, 1000);
 
     } catch (error) {
       console.error('Error loading stats:', error);
@@ -309,9 +300,21 @@ if (typeof document !== 'undefined') {
     }
   });
 
-  // Reflect external changes (e.g. the in-player toggle button) in the popup checkbox
+  // Reflect external changes (e.g. the in-player toggle button) in the popup checkbox,
+  // and repaint the stats when the background worker commits new watch time.
+  // Event-driven beats the old 1 s poll: no storage read when nothing changed,
+  // and it can't miss an update between ticks.
   chrome.storage.onChanged.addListener((changes, namespace) => {
     if (namespace !== 'local') return;
+
+    if (changes.dailyStats || changes.totalWatchTime) {
+      if (changes.dailyStats) cachedDailyStats = changes.dailyStats.newValue || {};
+      renderCounters(
+        changes.totalWatchTime ? changes.totalWatchTime.newValue : undefined
+      );
+      renderChart(cachedDailyStats);
+    }
+
     if (changes.showMilliseconds) {
       const cb = document.getElementById('showMilliseconds');
       if (cb) cb.checked = changes.showMilliseconds.newValue !== false;
@@ -375,13 +378,6 @@ if (typeof document !== 'undefined') {
         console.error('Error resetting stats:', error);
         alert('Error resetting statistics. Please try again.');
       }
-    }
-  });
-
-  // Cleanup when popup closes
-  window.addEventListener('beforeunload', () => {
-    if (updateInterval) {
-      clearInterval(updateInterval);
     }
   });
 
