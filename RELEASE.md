@@ -68,6 +68,10 @@ in 8ddfc33 and the canonical pages moved to
 repo entirely, so nothing here breaks when they go stale — same drift trap as
 before, just further away.
 
+GitHub Pages for this repo is **off**. Do not switch it back on: the old
+`1gory.github.io/youtube-milliseconds-extension/` URLs are retired and every
+push to `main` used to fail a Jekyll build against the deleted `docs/`.
+
 - [ ] Audit the **feature list** and the **tagline** on
       `https://ipershin.me/youtube-milliseconds-timer/` against the current
       `store-listing.md` — every user-visible feature this release touched
@@ -87,10 +91,18 @@ before, just further away.
 - [ ] `npm test` — still green
 
 ### 9. Commit + tag
-- [ ] `git add` only the files that should ship (see *Packaging* below)
+- [ ] `git add` only the files that should ship (see *Packaging* below).
+      Never `git add -A` — unpacked build folders and scratch files live in the
+      repo root.
 - [ ] Commit message: `Release X.Y.Z: <one-line summary>`
+- [ ] `git fetch --tags` **before** reasoning about which tags exist. Local
+      `git tag -l` does not show tags created on the remote (e.g. by publishing
+      a GitHub Release from the web UI).
 - [ ] Tag: `git tag vX.Y.Z`
 - [ ] Push: `git push && git push --tags`
+- [ ] `gh run list --limit 3` — confirm the push did not turn a repo workflow
+      red. A failing build mail after release day is almost always something
+      that broke earlier and only now got retriggered.
 
 ### 10. Build ZIP
 Run from the repo root. The ZIP must contain **only** the files the extension
@@ -174,3 +186,15 @@ add to it after each release.
 - **1.5.2 → 1.6.0** — `package-lock.json` had been stuck at 1.2.1 for six
   releases because step 1 only mentions `manifest.json` and `package.json`.
   It does not ship in the ZIP, so nothing ever complained.
+- **1.6.0** — deleting `docs/` did not disable GitHub Pages. The setting stayed
+  on `main` / `/docs`, so every push to `main` ran a Jekyll build that failed
+  with `No such file or directory - /github/workspace/docs`. It broke on
+  31 May and stayed silent until the next push (release day, two months later),
+  which then looked like the release had broken CI. Lesson: when you delete a
+  directory something *outside the repo* is configured to read, turn that
+  consumer off in the same change — and add step 9's `gh run list` check so the
+  breakage surfaces on the day it happens.
+- **1.6.0** — claimed the `v1.5.2` tag did not exist, based on `git tag -l`
+  without fetching. The tag was on the remote all along (GitHub created it when
+  the v1.5.2 Release was published). Lesson: `git fetch --tags` first, now in
+  step 9.

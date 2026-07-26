@@ -1,3 +1,7 @@
 node_modules/
 *.zip
 CLAUDE.md
+
+# Unpacked release builds left behind after a store upload
+youtube-milliseconds-v*/
+.DS_Store
