@@ -31,6 +31,19 @@ function parseTimestamp(input) {
   return seconds;
 }
 
+// Pure utility — does this YouTube path host a real, user-driven video player?
+// Everything the extension does is gated on this. The home feed, search results
+// and channel pages keep hover-preview <video> elements in the DOM, and treating
+// those as "the player" counted preview playback as watch time and injected the
+// control-bar buttons into the preview player.
+function isPlayerPath(pathname) {
+  if (typeof pathname !== 'string') return false;
+  return pathname === '/watch' ||
+    pathname.startsWith('/shorts/') ||
+    pathname.startsWith('/embed/') ||
+    pathname.startsWith('/live/');
+}
+
 // Pure utility — how many seconds of a sampling window actually count as "watched".
 //
 // Wall-clock time alone over-counts (machine sleep, stalled buffering) and media
@@ -155,8 +168,24 @@ if (typeof document !== 'undefined') {
     <path d="M8 1a.5.5 0 0 1 .5.5v1.04a5.5 5.5 0 0 1 4.96 4.96H14.5a.5.5 0 0 1 0 1h-1.04a5.5 5.5 0 0 1-4.96 4.96V14.5a.5.5 0 0 1-1 0v-1.04A5.5 5.5 0 0 1 2.54 8.5H1.5a.5.5 0 0 1 0-1h1.04A5.5 5.5 0 0 1 7.5 2.54V1.5A.5.5 0 0 1 8 1zm0 2.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9zM8 6a2 2 0 1 1 0 4 2 2 0 0 1 0-4z"/>
   </svg>`;
 
-  const isShortsPage = () => window.location.pathname.startsWith('/shorts/');
-  const getVideo = () => currentVideoElement || document.querySelector('video');
+  const isShortsPage = () => location.pathname.startsWith('/shorts/');
+  const isPlayerPage = () => isPlayerPath(location.pathname);
+
+  // Resolve the *real* player root. Never fall back to a bare
+  // document.querySelector('video') — see isPlayerPath above for why.
+  //
+  // Shorts is resolved separately because YouTube keeps the watch page's
+  // #movie_player mounted after a watch → shorts SPA transition; matching it
+  // first would leave us reading the previous video's clock.
+  const getPlayerRoot = () => isShortsPage()
+    ? document.querySelector('#shorts-player') ||
+      document.querySelector('ytd-reel-video-renderer[is-active] .html5-video-player')
+    : document.querySelector('#movie_player') ||
+      document.querySelector('ytd-player .html5-video-player');
+
+  const findPlayerVideo = () => getPlayerRoot()?.querySelector('video') || null;
+
+  const getVideo = () => currentVideoElement || findPlayerVideo();
 
   // Settings are loaded once up front; UI setup awaits this promise so that
   // buttons the user disabled never flash on screen before being removed.
@@ -186,6 +215,11 @@ if (typeof document !== 'undefined') {
   function applyUiSettings() {
     displayModeRetries = 0;
     updateDisplayMode();
+    // Call order matters: every setup below inserts its element directly after
+    // the shared anchor (the copy button, or the time display when copy is
+    // hidden), so the last one to run ends up leftmost. This order yields
+    // [copy][A][B][jump][ms] — the layout the store screenshots document, so
+    // do not "tidy" it without re-shooting screenshots/3.jpg.
     setupCopyButton();
     setupMillisecondsToggleButton();
     setupJumpControl();
@@ -329,8 +363,9 @@ if (typeof document !== 'undefined') {
     // Shorts has no time readout at all — skip the 5 s retry loop entirely.
     if (isShortsPage()) return;
 
-    const currentTimeElement = document.querySelector('.ytp-time-current');
-    const durationElement = document.querySelector('.ytp-time-duration');
+    const root = getPlayerRoot();
+    const currentTimeElement = root?.querySelector('.ytp-time-current');
+    const durationElement = root?.querySelector('.ytp-time-duration');
 
     if (!currentTimeElement || !durationElement) {
       if (displayModeRetries < MAX_DISPLAY_MODE_RETRIES) {
@@ -343,7 +378,7 @@ if (typeof document !== 'undefined') {
     cachedTimeCurrentEl = currentTimeElement;
     cachedTimeDurationEl = durationElement;
     cachedTimeDisplayEl = currentTimeElement.closest('.ytp-time-display');
-    cachedPlayerEl = document.querySelector('#movie_player');
+    cachedPlayerEl = root;
 
     stopDisplayLoop();
 
@@ -634,7 +669,9 @@ if (typeof document !== 'undefined') {
   // All injected control-bar buttons sit after the copy button when it exists,
   // and fall back to the time display when the user has hidden it.
   function getControlAnchor() {
-    return document.querySelector('.ytp-copy-time-btn') || document.querySelector('.ytp-time-display');
+    const root = getPlayerRoot();
+    if (!root) return null;
+    return root.querySelector('.ytp-copy-time-btn') || root.querySelector('.ytp-time-display');
   }
 
   // Update visual state of the ms-toggle button to match current showMilliseconds value
@@ -697,7 +734,7 @@ if (typeof document !== 'undefined') {
     closeJumpInput();
     if (isShortsPage()) return;
 
-    const videoContainer = document.querySelector('#movie_player') || document.querySelector('.html5-video-container');
+    const videoContainer = getPlayerRoot();
     if (!videoContainer) return;
 
     const input = document.createElement('input');
@@ -769,9 +806,9 @@ if (typeof document !== 'undefined') {
   function setupCopyButton() {
     document.querySelector('.ytp-copy-time-btn')?.remove();
 
-    if (!showCopyBtn) return;
+    if (!showCopyBtn || isShortsPage()) return;
 
-    const timeDisplay = document.querySelector('.ytp-time-display');
+    const timeDisplay = getPlayerRoot()?.querySelector('.ytp-time-display');
     if (!timeDisplay) return;
 
     const btn = document.createElement('button');
@@ -880,10 +917,10 @@ if (typeof document !== 'undefined') {
       resetInterval();
     });
 
-    const videoContainer = document.querySelector('#movie_player') || document.querySelector('.html5-video-container');
+    const videoContainer = getPlayerRoot();
     if (videoContainer) videoContainer.appendChild(badge);
 
-    const progressBar = document.querySelector('.ytp-progress-bar');
+    const progressBar = videoContainer?.querySelector('.ytp-progress-bar');
     if (progressBar) {
       const segment = document.createElement('div');
       segment.className = 'ytp-interval-segment';
@@ -920,11 +957,14 @@ if (typeof document !== 'undefined') {
 
   function initializeExtension() {
     if (isInitialized || initializationInProgress) return;
+    // No player on this page → no 100 ms × 100 polling loop on the home feed,
+    // search results or channel pages, which is most of a browsing session.
+    if (!isPlayerPage()) return;
     initializationInProgress = true;
     clearInitTimers();
 
     playerCheckInterval = setInterval(() => {
-      const video = document.querySelector('video');
+      const video = findPlayerVideo();
       if (video) onPlayerFound(video);
     }, PLAYER_POLL_MS);
 
@@ -1005,8 +1045,23 @@ if (typeof document !== 'undefined') {
   // that observer ran a querySelector('video') over every added subtree, which
   // on an infinite-scroll feed meant continuous work for no benefit.
   setInterval(() => {
-    if (location.href === lastHref) return;
-    handleNavigation();
+    if (location.href !== lastHref) {
+      handleNavigation();
+      return;
+    }
+    // YouTube can replace the <video> element without an SPA navigation (ad
+    // breaks, quality/player reloads). The old node stays alive in our closure
+    // with a frozen currentTime, so the readout and watch-time tracking both
+    // silently die until the next page change. Re-attach instead.
+    if (isInitialized && currentVideoElement && !currentVideoElement.isConnected) {
+      commitWatchTime();
+      isInitialized = false;
+      initializationInProgress = false;
+      isVideoPlaying = false;
+      currentVideoElement = null;
+      stopAllTracking();
+      initializeExtension();
+    }
   }, NAV_POLL_MS);
 
   // ------------------------------------------------------ keyboard shortcuts
@@ -1017,7 +1072,9 @@ if (typeof document !== 'undefined') {
   document.addEventListener('keydown', (e) => {
     if (e.ctrlKey || e.metaKey) return;
     if (isTypingTarget(e.target)) return;
-    if (isShortsPage()) return;
+    // Shorts has no controls to drive, and outside a player page the shortcuts
+    // would only swallow keystrokes the rest of YouTube might want.
+    if (!isPlayerPage() || isShortsPage()) return;
 
     // Alt is not excluded here: on several keyboard layouts the bracket keys
     // are only reachable via AltGr, which reports altKey.
@@ -1063,5 +1120,5 @@ if (typeof document !== 'undefined') {
 
 // Export for testing in Node.js environment
 if (typeof module !== 'undefined') {
-  module.exports = { formatVideoTime, parseTimestamp, computeWatchedSeconds };
+  module.exports = { formatVideoTime, parseTimestamp, computeWatchedSeconds, isPlayerPath };
 }

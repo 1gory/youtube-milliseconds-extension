@@ -313,6 +313,10 @@ if (typeof document !== 'undefined') {
         changes.totalWatchTime ? changes.totalWatchTime.newValue : undefined
       );
       renderChart(cachedDailyStats);
+      // Only the current month can gain time while the popup is open, and
+      // repainting a month the user has navigated away to would fight their
+      // hover tooltips for no benefit.
+      if (calendarOffset === 0) renderCalendar(cachedDailyStats, calendarOffset);
     }
 
     if (changes.showMilliseconds) {
@@ -355,29 +359,56 @@ if (typeof document !== 'undefined') {
     });
   });
 
-  // Reset statistics
-  document.getElementById('resetBtn').addEventListener('click', async () => {
-    if (confirm('Are you sure you want to reset all statistics?')) {
-      try {
-        const currentSettings = await chrome.storage.local.get([
-          'showMilliseconds', 'showIntervalTimer',
-          'showCopyBtn', 'showMsToggleBtn', 'showJumpBtn',
-        ]);
-        await chrome.storage.local.clear();
-        await chrome.storage.local.set({
-          totalWatchTime: 0,
-          dailyStats: {},
-          showMilliseconds: currentSettings.showMilliseconds !== false,
-          showIntervalTimer: currentSettings.showIntervalTimer !== false,
-          showCopyBtn: currentSettings.showCopyBtn !== false,
-          showMsToggleBtn: currentSettings.showMsToggleBtn !== false,
-          showJumpBtn: currentSettings.showJumpBtn !== false,
-        });
-        location.reload();
-      } catch (error) {
-        console.error('Error resetting stats:', error);
-        alert('Error resetting statistics. Please try again.');
-      }
+  // Reset statistics.
+  // The confirmation is inline rather than window.confirm(): a modal dialog
+  // raised from an extension popup steals focus, and losing focus is exactly
+  // what closes the popup — so the destructive action could be silently
+  // dropped, or worse, left hanging over the page. Same reason there is no
+  // alert() on the error path.
+  const RESET_ARM_MS = 4000;
+  const resetBtn = document.getElementById('resetBtn');
+  const RESET_LABEL = resetBtn.textContent;
+  let resetArmed = false;
+  let resetArmTimeout = null;
+
+  function disarmReset() {
+    resetArmed = false;
+    clearTimeout(resetArmTimeout);
+    resetArmTimeout = null;
+    resetBtn.textContent = RESET_LABEL;
+    resetBtn.classList.remove('btn--armed');
+  }
+
+  resetBtn.addEventListener('click', async () => {
+    if (!resetArmed) {
+      resetArmed = true;
+      resetBtn.textContent = 'Click again to confirm';
+      resetBtn.classList.add('btn--armed');
+      resetArmTimeout = setTimeout(disarmReset, RESET_ARM_MS);
+      return;
+    }
+
+    disarmReset();
+    try {
+      const currentSettings = await chrome.storage.local.get([
+        'showMilliseconds', 'showIntervalTimer',
+        'showCopyBtn', 'showMsToggleBtn', 'showJumpBtn',
+      ]);
+      await chrome.storage.local.clear();
+      await chrome.storage.local.set({
+        totalWatchTime: 0,
+        dailyStats: {},
+        showMilliseconds: currentSettings.showMilliseconds !== false,
+        showIntervalTimer: currentSettings.showIntervalTimer !== false,
+        showCopyBtn: currentSettings.showCopyBtn !== false,
+        showMsToggleBtn: currentSettings.showMsToggleBtn !== false,
+        showJumpBtn: currentSettings.showJumpBtn !== false,
+      });
+      location.reload();
+    } catch (error) {
+      console.error('Error resetting stats:', error);
+      resetBtn.textContent = 'Reset failed — try again';
+      setTimeout(disarmReset, RESET_ARM_MS);
     }
   });
 

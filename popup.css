@@ -435,6 +435,9 @@ body {
     background-color: var(--accent);
     color: white;
     border: none;
+    /* Wide enough for the "Click again to confirm" state so the button does not
+       resize under the cursor between the two clicks. */
+    min-width: 170px;
     padding: 8px 16px;
     border-radius: 4px;
     cursor: pointer;
@@ -448,4 +451,10 @@ body {
 
 #resetBtn:active {
     background-color: #903535;
+}
+
+/* Second click of the inline reset confirmation */
+#resetBtn.btn--armed {
+    background-color: var(--accent-hover);
+    box-shadow: 0 0 0 2px var(--accent-soft);
 }

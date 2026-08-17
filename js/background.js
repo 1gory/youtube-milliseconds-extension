@@ -11,6 +11,39 @@ function getLocalDateString(date) {
   return `${y}-${m}-${d}`;
 }
 
+// dailyStats gains one key per active day and nothing ever removed them, while
+// the *whole* map is re-serialised on every watch-time write (~every 5 s per
+// playing tab). Left alone it grows without bound; two years of history is far
+// more than the popup's calendar is ever browsed back through.
+const DAILY_STATS_RETENTION_DAYS = 730;
+
+// Upper bound on a single reported batch. The content script already caps each
+// sample at 300 s and flushes every 5 s, so anything past an hour is a bug or a
+// forged message — clamp rather than drop so real time is never lost.
+const MAX_MESSAGE_SECONDS = 3600;
+
+// Pure — returns a map holding only the last `maxDays` days ending at
+// `referenceDate`. Returns the input untouched when nothing needs dropping, so
+// the common path allocates nothing. Keys are YYYY-MM-DD, so string
+// comparison is chronological.
+function pruneDailyStats(dailyStats, referenceDate, maxDays) {
+  const keys = Object.keys(dailyStats);
+  if (keys.length <= maxDays) return dailyStats;
+
+  const cutoffDate = new Date(
+    referenceDate.getFullYear(),
+    referenceDate.getMonth(),
+    referenceDate.getDate() - (maxDays - 1)
+  );
+  const cutoff = getLocalDateString(cutoffDate);
+
+  const pruned = {};
+  for (const key of keys) {
+    if (key >= cutoff) pruned[key] = dailyStats[key];
+  }
+  return pruned;
+}
+
 // Only run Chrome API setup in browser/extension context
 if (typeof chrome !== 'undefined') {
 
@@ -42,11 +75,12 @@ if (typeof chrome !== 'undefined') {
   // Handle messages from content script
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'UPDATE_WATCH_TIME') {
-      const seconds = Number(message.seconds);
-      if (!Number.isFinite(seconds) || seconds <= 0) {
+      const reported = Number(message.seconds);
+      if (!Number.isFinite(reported) || reported <= 0) {
         sendResponse({ success: false });
         return false;
       }
+      const seconds = Math.min(reported, MAX_MESSAGE_SECONDS);
 
       updateWatchTime(seconds)
         .then(() => sendResponse({ success: true }))
@@ -77,8 +111,9 @@ if (typeof chrome !== 'undefined') {
         const data = await chrome.storage.local.get(['totalWatchTime', 'dailyStats']);
         const newTotal = accumulateWatchTime(data.totalWatchTime, seconds);
 
-        const dailyStats = data.dailyStats || {};
-        const today = getLocalDateString(new Date());
+        const now = new Date();
+        const dailyStats = pruneDailyStats(data.dailyStats || {}, now, DAILY_STATS_RETENTION_DAYS);
+        const today = getLocalDateString(now);
         dailyStats[today] = (dailyStats[today] || 0) + seconds;
 
         await chrome.storage.local.set({
@@ -95,5 +130,5 @@ if (typeof chrome !== 'undefined') {
 
 // Export for testing in Node.js environment
 if (typeof module !== 'undefined') {
-  module.exports = { accumulateWatchTime, getLocalDateString };
+  module.exports = { accumulateWatchTime, getLocalDateString, pruneDailyStats };
 }

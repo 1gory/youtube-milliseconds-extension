@@ -194,6 +194,18 @@ add to it after each release.
   directory something *outside the repo* is configured to read, turn that
   consumer off in the same change — and add step 9's `gh run list` check so the
   breakage surfaces on the day it happens.
+- **1.6.1** — `document.querySelector('video')` had been the way the content
+  script found "the" player since the first release. YouTube keeps hover-preview
+  `<video>` elements mounted on the home feed, search results and channel pages,
+  so the extension attached to whichever one came first in document order:
+  preview autoplay was counted as watch time, and the control-bar buttons were
+  injected into the preview player. Nothing errored, the numbers were just
+  quietly wrong. Lesson: every player lookup goes through `getPlayerRoot()` —
+  grep for a bare `querySelector('video')` before shipping.
+- **1.6.1** — reordering the injected control-bar buttons is a *screenshot*
+  change, not a code change. `screenshots/3.jpg` documents the exact icon
+  sequence, so the reorder was reverted rather than shipped with a stale asset.
+  Lesson: step 4 applies to button order, not only to added features.
 - **1.6.0** — claimed the `v1.5.2` tag did not exist, based on `git tag -l`
   without fetching. The tag was on the remote all along (GitHub created it when
   the v1.5.2 Release was published). Lesson: `git fetch --tags` first, now in
