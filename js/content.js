@@ -97,6 +97,7 @@ if (typeof document !== 'undefined') {
 
   // ---------------------------------------------------------------- constants
   const MAX_DISPLAY_MODE_RETRIES = 50;   // × 100 ms = 5 s max wait for player DOM
+  const MAX_UI_REBUILDS = 10;            // watchdog rebuild budget per healthy streak
   const PLAYER_POLL_MS = 100;
   const PLAYER_POLL_TIMEOUT_MS = 10000;
   const NO_MS_TICK_MS = 250;             // second-level precision needs no rAF
@@ -110,6 +111,7 @@ if (typeof document !== 'undefined') {
   let displayLoopMode = null;            // 'raf' | 'interval' | null
   let displayModeTimeout = null;
   let displayModeRetries = 0;
+  let uiRebuilds = 0;                    // see the control-bar watchdog below
 
   // --------------------------------------------------------------- init state
   let playerCheckInterval = null;
@@ -1012,6 +1014,7 @@ if (typeof document !== 'undefined') {
       displayModeTimeout = null;
     }
     displayModeRetries = 0;
+    uiRebuilds = 0;
 
     if (videoAbortController) {
       videoAbortController.abort();
@@ -1040,6 +1043,35 @@ if (typeof document !== 'undefined') {
 
   window.addEventListener('yt-navigate-finish', handleNavigation);
 
+  // YouTube re-renders the control bar on its own, leaving the <video> element
+  // alone (ad breaks, player re-renders), and on a cold load it can render the
+  // bar seconds after the video. Both leave the extension half-dead with no
+  // event to announce it: cached time nodes end up detached, injected buttons
+  // are simply gone, and the rAF loop keeps writing where nobody can see.
+  //
+  // So the question asked once a second is not "did we lose our node" but
+  // "does the live bar carry our UI". Anchoring on the live bar matters:
+  // a genuinely absent bar answers "no", where anchoring on the cached node
+  // would restart updateDisplayMode()'s retry chain every tick and leave
+  // MAX_DISPLAY_MODE_RETRIES unable to ever bite — a missing control bar would
+  // become a permanent 10 Hz DOM poll.
+  const uiNeedsRebuild = () => {
+    if (isShortsPage()) return false;
+    const root = getPlayerRoot();
+    const live = root?.querySelector('.ytp-time-current');
+    if (!live) return false;
+    // A detached cached node can never equal the live one, so this single
+    // comparison covers both the re-render and the never-acquired case.
+    if (live !== cachedTimeCurrentEl) return true;
+    // The readout can be fine while the buttons are missing: their setup bails
+    // silently when the anchor isn't there yet and, unlike updateDisplayMode,
+    // nothing retries it.
+    return (showCopyBtn       && !root.querySelector('.ytp-copy-time-btn')) ||
+           (showMsToggleBtn   && !root.querySelector('.ytp-ms-toggle-btn')) ||
+           (showJumpBtn       && !root.querySelector('.ytp-jump-btn')) ||
+           (showIntervalTimer && !root.querySelector('.ytp-interval-btn-a'));
+  };
+
   // Fallback for SPA transitions where yt-navigate-finish doesn't fire.
   // A 1 s href comparison replaces the old MutationObserver on document.body:
   // that observer ran a querySelector('video') over every added subtree, which
@@ -1061,7 +1093,22 @@ if (typeof document !== 'undefined') {
       currentVideoElement = null;
       stopAllTracking();
       initializeExtension();
+      return;
     }
+
+    if (!isInitialized) return;
+    if (!uiNeedsRebuild()) {
+      uiRebuilds = 0;
+      return;
+    }
+    // A rebuild that doesn't take means our markup assumptions no longer hold.
+    // Budget the attempts so a future YouTube redesign degrades to "buttons
+    // missing" instead of "extension rebuilds the control bar every second" —
+    // the second one is what store reviews call lag. The budget resets on the
+    // first healthy tick, so ordinary re-renders never exhaust it.
+    if (uiRebuilds >= MAX_UI_REBUILDS) return;
+    uiRebuilds++;
+    applyUiSettings();
   }, NAV_POLL_MS);
 
   // ------------------------------------------------------ keyboard shortcuts

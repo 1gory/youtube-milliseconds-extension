@@ -1,15 +1,18 @@
 {
   "name": "youtube-milliseconds-extension",
-  "version": "1.6.1",
+  "version": "1.6.2",
   "description": "Millisecond timestamps, jump-to-timestamp, interval timer A→B, ms toggle button, one-click copy, watch time stats",
   "scripts": {
     "test": "jest"
   },
   "devDependencies": {
-    "jest": "^29.0.0"
+    "jest": "^29.0.0",
+    "jest-environment-jsdom": "^29.7.0"
   },
   "jest": {
     "testEnvironment": "node",
-    "testMatch": ["**/tests/**/*.test.js"]
+    "testMatch": [
+      "**/tests/**/*.test.js"
+    ]
   }
 }

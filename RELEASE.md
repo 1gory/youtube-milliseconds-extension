@@ -210,3 +210,23 @@ add to it after each release.
   without fetching. The tag was on the remote all along (GitHub created it when
   the v1.5.2 Release was published). Lesson: `git fetch --tags` first, now in
   step 9.
+- **1.6.2** — the first cut of the control-bar watchdog reset `displayModeRetries`
+  on every tick, which left `MAX_DISPLAY_MODE_RETRIES` unable to ever bite: a
+  control bar that never came back turned into a permanent 10 Hz DOM poll
+  (measured 164 `document.querySelector` calls per 10 s against a healthy 10).
+  A fix for "the player freezes" that ships the very lag the reviews complain
+  about. Lesson: a watchdog must not reset a budget it does not own, and any
+  recovery loop needs its own ceiling — `tests/controlBarRecovery.test.js` now
+  counts DOM lookups to keep this honest.
+- **1.6.2** — `updateDisplayMode()` had a 5 s retry chain but the button setups
+  (`setupCopyButton`, `setupJumpControl`, `setupIntervalControls`) had none: they
+  bail silently when the anchor is missing and nothing ever called them again.
+  If YouTube rendered the control bar later than the `<video>` element, the
+  timestamp recovered on its own and the buttons were gone for the whole session
+  — which is why it went unnoticed for six releases. Lesson: when one code path
+  gets a retry because the DOM is late, check every sibling path that reads the
+  same DOM.
+- **1.6.2** — a green test proves nothing until it has been run against the code
+  *without* the fix. Each new case here was replayed against 1.6.1 and against
+  the first cut of the fix; that is what surfaced both entries above. Lesson:
+  step 8 means "add a test that fails on the old code", not "add a test".
