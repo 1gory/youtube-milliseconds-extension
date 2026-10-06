@@ -142,8 +142,6 @@ unzip -l youtube-milliseconds-v${VERSION}.zip
 - [ ] Upload the ZIP under "Package".
 - [ ] Replace **every** stale screenshot in the listing (re-audit per step 4).
 - [ ] Update the description text if `store-listing.md` changed.
-- [ ] Fill the **What's new in this version** field (1–3 sentences from the
-      GitHub release notes).
 - [ ] Confirm Privacy practices if CWS asks (same answers as last time unless
       permissions changed).
 - [ ] Hit **Submit for review**.
