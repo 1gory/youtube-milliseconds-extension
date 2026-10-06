@@ -27,6 +27,10 @@ drift apart easily, and nothing breaks loudly when they do.
 - [ ] Bump `package.json` → `"version"` to the **same** value
 - [ ] Bump `package-lock.json` → both top-level `"version"` fields (lines 3 and 9)
 - [ ] `grep -m3 '"version"' manifest.json package.json package-lock.json` — confirm they agree
+- [ ] Add the new version at the top of `js/changelog.js` — what changed *for
+      the user*, one to three lines, plain words (the popup shows it under the
+      footer version link). `tests/changelog.test.js` fails until it matches
+      `manifest.json`
 
 ### 2. Pre-flight
 - [ ] All feature work merged into `main`
@@ -126,6 +130,7 @@ zip -r youtube-milliseconds-v${VERSION}.zip \
   js/content.js \
   js/background.js \
   js/popup.js \
+  js/changelog.js \
   icons/
 ```
 

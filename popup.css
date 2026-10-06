@@ -431,6 +431,116 @@ body {
     text-decoration: underline;
 }
 
+/* "Leave a review · v1.7.0" wraps as one unit, never mid-link */
+.feedback-actions {
+    white-space: nowrap;
+}
+
+.feedback-sep {
+    margin: 0 5px;
+}
+
+/* Footer version: reads as quiet text, opens the version history */
+.version-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.version-btn:hover,
+.version-btn[aria-expanded="true"] {
+    color: var(--accent);
+}
+
+.version-btn:focus-visible {
+    outline: 2px solid var(--accent-soft);
+    border-radius: 3px;
+}
+
+/* Version history panel */
+.changelog {
+    margin: 0 0 12px;
+    padding: 2px 10px;
+    max-height: 220px;
+    overflow-y: auto;
+    text-align: left;
+    background: var(--bg-card);
+    border-radius: 6px;
+    box-shadow: var(--shadow);
+}
+
+.changelog-entry + .changelog-entry {
+    border-top: 1px solid var(--border);
+}
+
+.changelog-entry summary {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 6px 0;
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+    outline: none;
+}
+
+.changelog-entry summary::-webkit-details-marker {
+    display: none;
+}
+
+/* Same chevron as the stats section */
+.changelog-entry summary::after {
+    content: '▾';
+    margin-left: auto;
+    font-size: 11px;
+    color: var(--text-muted);
+    transition: transform 0.2s;
+}
+
+.changelog-entry[open] summary::after {
+    transform: rotate(180deg);
+}
+
+.changelog-version {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.changelog-date {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.changelog-entry ul {
+    margin: 0 0 8px;
+    padding-left: 16px;
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--text-secondary);
+}
+
+.changelog-entry li + li {
+    margin-top: 3px;
+}
+
+.changelog-all {
+    display: block;
+    padding: 7px 0 6px;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    text-align: center;
+    color: var(--accent);
+    text-decoration: none;
+}
+
+.changelog-all:hover {
+    text-decoration: underline;
+}
+
 #resetBtn {
     background-color: var(--accent);
     color: white;

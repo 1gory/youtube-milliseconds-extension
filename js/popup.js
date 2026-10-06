@@ -404,6 +404,58 @@ if (typeof document !== 'undefined') {
     }
   });
 
+  // Version history (js/changelog.js). The footer version toggles an in-popup
+  // list of the latest releases; built on first open, since most popup opens
+  // never look at it. Months are formatted in English to match the text.
+  function renderChangelog(container) {
+    CHANGELOG.slice(0, CHANGELOG_VISIBLE).forEach((entry, i) => {
+      const item = document.createElement('details');
+      item.className = 'changelog-entry';
+      item.open = i === 0;
+
+      const summary = document.createElement('summary');
+      const version = document.createElement('span');
+      version.className = 'changelog-version';
+      version.textContent = `v${entry.version}`;
+      const date = document.createElement('span');
+      date.className = 'changelog-date';
+      date.textContent = new Date(`${entry.date}-15T12:00:00`)
+        .toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      summary.append(version, date);
+
+      const list = document.createElement('ul');
+      entry.changes.forEach((line) => {
+        const li = document.createElement('li');
+        li.textContent = line;
+        list.appendChild(li);
+      });
+
+      item.append(summary, list);
+      container.appendChild(item);
+    });
+
+    const all = document.createElement('a');
+    all.className = 'changelog-all';
+    all.href = RELEASES_URL;
+    all.target = '_blank';
+    all.rel = 'noopener noreferrer';
+    all.textContent = 'Full history on GitHub →';
+    container.appendChild(all);
+  }
+
+  const versionBtn = document.getElementById('versionBtn');
+  const changelogEl = document.getElementById('changelog');
+  versionBtn.textContent = `v${chrome.runtime.getManifest().version}`;
+  versionBtn.addEventListener('click', () => {
+    const opening = changelogEl.hidden;
+    if (opening && !changelogEl.childElementCount) renderChangelog(changelogEl);
+    changelogEl.hidden = !opening;
+    versionBtn.setAttribute('aria-expanded', String(opening));
+    // The popup is taller than its 600 px cap once stats are expanded, so the
+    // panel can open below the fold.
+    if (opening) changelogEl.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+  });
+
   // Initialize popup (script is at end of <body>, DOM is already ready)
   loadStats();
 

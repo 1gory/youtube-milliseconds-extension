@@ -185,15 +185,45 @@ const check = (name, ok, detail = '') => {
   await popup.waitForTimeout(500);
   const total = await popup.textContent('#totalTime');
   check('popup renders total', /\d+s/.test(total), total);
-  const tabChanges = [];
-  await page.exposeFunction('__note', (k) => tabChanges.push(k)).catch(() => {});
-  await page.evaluate(() => {}); // keep page alive
+
+  // Version history: footer version → in-popup list → GitHub link.
+  const manifestVersion = JSON.parse(fs.readFileSync(path.join(EXT, 'manifest.json'), 'utf8')).version;
+  const versionText = await popup.textContent('#versionBtn').catch(() => null);
+  check('popup footer shows the installed version', versionText === `v${manifestVersion}`, versionText);
+  if (process.env.SHOTS) await popup.screenshot({ path: path.join(process.env.SHOTS, 'popup-closed.png'), fullPage: true });
+  await popup.click('#versionBtn').catch(() => {});
+  await popup.waitForTimeout(400);
+  const history = await popup.evaluate(() => {
+    const panel = document.querySelector('#changelog');
+    return panel && {
+      visible: !panel.hidden && panel.getBoundingClientRect().height > 0,
+      entries: panel.querySelectorAll('.changelog-entry').length,
+      firstOpen: panel.querySelector('.changelog-entry')?.open,
+      scrolls: panel.scrollHeight > panel.clientHeight,
+      lastLink: panel.lastElementChild?.href,
+    };
+  });
+  check('version history opens with 10 releases, newest expanded, scrollable, GitHub link last',
+    history && history.visible && history.entries === 10 && history.firstOpen && history.scrolls &&
+    /github\.com\/.+\/releases$/.test(history.lastLink || ''), JSON.stringify(history));
+  if (process.env.SHOTS) {
+    await popup.locator('#changelog').screenshot({ path: path.join(process.env.SHOTS, 'changelog-top.png') });
+    await popup.evaluate(() => { const p = document.querySelector('#changelog'); p.scrollTop = p.scrollHeight; });
+    await popup.locator('#changelog').screenshot({ path: path.join(process.env.SHOTS, 'changelog-bottom.png') });
+    await popup.screenshot({ path: path.join(process.env.SHOTS, 'popup-open.png'), fullPage: true });
+  }
+  await popup.click('#versionBtn').catch(() => {});
+  // Pause first: pausing flushes the tab's pending watch time at once, and a
+  // still-playing tab would legitimately add its next 5 s batch after the
+  // reset — which made this check pass or fail on timing alone.
+  await page.evaluate(() => document.querySelector('video').pause());
+  await page.waitForTimeout(500);
   await popup.click('#resetBtn');
   await popup.click('#resetBtn');
   await popup.waitForTimeout(1500);
   s = await worker.evaluate(() => chrome.storage.local.get(null));
   check('reset zeroes stats, keeps settings',
-    s.totalWatchTime < 2 && Object.values(s.dailyStats || {}).every((v) => v < 2) &&
+    s.totalWatchTime === 0 && Object.values(s.dailyStats || {}).every((v) => v === 0) &&
     s.showCopyBtn === false && s.showJumpBtn === false && s.showMilliseconds === true,
     JSON.stringify({ total: s.totalWatchTime, showCopyBtn: s.showCopyBtn, showJumpBtn: s.showJumpBtn }));
   c = await count();

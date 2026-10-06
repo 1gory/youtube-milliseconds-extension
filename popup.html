@@ -79,12 +79,16 @@
   <div class="footer">
     <p class="feedback">
       Got an idea to improve this or found a bug?
-      <a href="https://chromewebstore.google.com/detail/youtube-milliseconds-time/bchlendkhiidadpakkfgnpeklmifffcp/reviews"
-         target="_blank" rel="noopener noreferrer">Leave a review</a>
+      <span class="feedback-actions"><a href="https://chromewebstore.google.com/detail/youtube-milliseconds-time/bchlendkhiidadpakkfgnpeklmifffcp/reviews"
+         target="_blank" rel="noopener noreferrer">Leave a review</a><span class="feedback-sep" aria-hidden="true">·</span><button
+         type="button" id="versionBtn" class="version-btn"
+         aria-expanded="false" aria-controls="changelog" title="What's new"></button></span>
     </p>
+    <div id="changelog" class="changelog" hidden></div>
     <button id="resetBtn">Reset Statistics</button>
   </div>
 </div>
+<script src="js/changelog.js"></script>
 <script src="js/popup.js"></script>
 </body>
 </html>

@@ -39,6 +39,9 @@ Track your YouTube viewing habits with a full stats dashboard in the popup:
 • Monthly calendar heatmap with color-coded intensity per day
 Navigate back through previous months to see historical data.
 
+Version history
+Click the version number at the bottom of the popup to see what changed in each recent release, with a link to the full history on GitHub.
+
 PRIVACY
 
 No accounts. No tracking. No data leaves your device. All stats are stored locally in your browser using Chrome's built-in storage. The extension never accesses the clipboard without an explicit user action.
