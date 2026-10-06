@@ -100,18 +100,18 @@ if (typeof document !== 'undefined') {
   const MAX_UI_REBUILDS = 10;            // watchdog rebuild budget per healthy streak
   const PLAYER_POLL_MS = 100;
   const PLAYER_POLL_TIMEOUT_MS = 10000;
-  const NO_MS_TICK_MS = 250;             // second-level precision needs no rAF
   const WATCH_FLUSH_MS = 5000;           // batch watch-time IPC instead of 1 msg/s
   const MAX_TICK_SECONDS = 300;          // hard ceiling on a single accepted sample
   const NAV_POLL_MS = 1000;              // fallback SPA-navigation detection
 
   // ------------------------------------------------------------ display state
-  let displayUpdateInterval = null;
   let displayRafId = null;
-  let displayLoopMode = null;            // 'raf' | 'interval' | null
+  let displayLoopMode = null;            // 'raf' | null
   let displayModeTimeout = null;
   let displayModeRetries = 0;
   let uiRebuilds = 0;                    // see the control-bar watchdog below
+  let showRemaining = false;             // YouTube's "time remaining" readout mode
+  let lastWrittenCurrent = null;         // our last text in .ytp-time-current
 
   // --------------------------------------------------------------- init state
   let playerCheckInterval = null;
@@ -272,12 +272,44 @@ if (typeof document !== 'undefined') {
     el.textContent = text;
   }
 
+  // Clicking the readout makes YouTube show the time remaining, written into
+  // the same node as "-10:05". Any text in the node that we did not write is
+  // YouTube's, and tells us which of its two modes is on.
+  function noteYouTubeReadout() {
+    const el = cachedTimeCurrentEl;
+    if (!el || el.textContent === lastWrittenCurrent) return;
+    showRemaining = /^\s*[-\u2212]/.test(el.textContent);
+  }
+
+  function readoutText(video) {
+    // Live streams have no end to count down to.
+    const remaining = showRemaining && Number.isFinite(video.duration);
+    const seconds = remaining ? Math.max(0, video.duration - video.currentTime) : video.currentTime;
+    return (remaining ? '-' : '') + formatVideoTime(seconds, showMilliseconds);
+  }
+
   // Hot-path tick: only updates currentTime. Reads cached refs to avoid 3× querySelector per tick.
+  // With milliseconds off YouTube's own text is already what we would write,
+  // so the node is left to YouTube: writing over it fought YouTube's
+  // remaining-time mode and made the readout flicker between "-10:05" and "0:30".
   function updateTimeDisplay() {
+    if (!showMilliseconds) return;
     const video = currentVideoElement;
     const el = cachedTimeCurrentEl;
     if (!video || !el || isNaN(video.currentTime)) return;
-    writeText(el, formatVideoTime(video.currentTime, showMilliseconds));
+    lastWrittenCurrent = readoutText(video);
+    writeText(el, lastWrittenCurrent);
+  }
+
+  // Leaving millisecond mode: put YouTube's format back once, if our text is
+  // still in the node — a paused video gets no YouTube tick to do it.
+  function restoreNativeReadout() {
+    const video = getVideo();
+    const el = cachedTimeCurrentEl;
+    if (!video || !el || !Number.isFinite(video.currentTime)) return;
+    if (el.textContent !== lastWrittenCurrent) return;
+    lastWrittenCurrent = readoutText(video);
+    writeText(el, lastWrittenCurrent);
   }
 
   // Duration only changes at metadata load — no need to format it on every tick.
@@ -295,6 +327,7 @@ if (typeof document !== 'undefined') {
     if (timeElementsObserver) timeElementsObserver.disconnect();
 
     timeElementsObserver = new MutationObserver(() => {
+      noteYouTubeReadout();
       updateTimeDisplay();
       updateDurationDisplay();
     });
@@ -303,10 +336,6 @@ if (typeof document !== 'undefined') {
   }
 
   function stopDisplayLoop() {
-    if (displayUpdateInterval) {
-      clearInterval(displayUpdateInterval);
-      displayUpdateInterval = null;
-    }
     if (displayRafId !== null) {
       cancelAnimationFrame(displayRafId);
       displayRafId = null;
@@ -331,28 +360,18 @@ if (typeof document !== 'undefined') {
     displayRafId = requestAnimationFrame(tick);
   }
 
-  function startIntervalLoop(ms) {
-    if (displayLoopMode === 'interval') return;
-    stopDisplayLoop();
-    displayLoopMode = 'interval';
-    displayUpdateInterval = setInterval(updateTimeDisplay, ms);
-  }
-
   // Pick the cheapest loop that still keeps the readout correct.
   // Paused video: no loop at all — 'seeking'/'seeked'/'timeupdate' cover the
-  // only moments currentTime can change.
+  // only moments currentTime can change. Milliseconds off: no loop either,
+  // YouTube keeps its own readout current (see updateTimeDisplay).
   function syncDisplayLoop() {
     if (!cachedTimeCurrentEl) return;
-    if (!isVideoPlaying) {
+    if (!isVideoPlaying || !showMilliseconds) {
       stopDisplayLoop();
       updateTimeDisplay();
       return;
     }
-    if (showMilliseconds) {
-      startRafLoop();
-    } else {
-      startIntervalLoop(NO_MS_TICK_MS);
-    }
+    startRafLoop();
   }
 
   // Resolve the player DOM, apply the ms/no-ms mode and (re)start the loop.
@@ -381,6 +400,7 @@ if (typeof document !== 'undefined') {
     cachedTimeDurationEl = durationElement;
     cachedTimeDisplayEl = currentTimeElement.closest('.ytp-time-display');
     cachedPlayerEl = root;
+    noteYouTubeReadout();
 
     stopDisplayLoop();
 
@@ -399,6 +419,7 @@ if (typeof document !== 'undefined') {
         timeElementsObserver.disconnect();
         timeElementsObserver = null;
       }
+      restoreNativeReadout();
     }
 
     syncDisplayLoop();
@@ -426,11 +447,13 @@ if (typeof document !== 'undefined') {
   function sampleWatchTime() {
     if (!isVideoPlaying) return;
 
-    // chrome.runtime.id becomes undefined when the extension context is invalidated
-    // (e.g. after a reload in dev mode). Stop all tracking to avoid repeated errors.
+    // chrome.runtime.id becomes undefined when the extension context is
+    // invalidated — a dev reload, or an auto-update, after which Chrome keeps
+    // this copy running in every open tab. Watch time can no longer be reported,
+    // but the readout needs nothing from the runtime, so only tracking stops.
     if (!chrome.runtime?.id) {
       pendingWatchSeconds = 0;
-      stopAllTracking();
+      stopTimeTracking();
       return;
     }
 
@@ -466,7 +489,8 @@ if (typeof document !== 'undefined') {
       chrome.runtime.sendMessage({ type: 'UPDATE_WATCH_TIME', seconds })
         .catch(() => { /* background not ready — one batch lost, not worth retrying */ });
     } catch {
-      stopAllTracking();
+      // Synchronous throw = invalidated context; see sampleWatchTime().
+      stopTimeTracking();
     }
   }
 
@@ -483,12 +507,16 @@ if (typeof document !== 'undefined') {
     timeTrackingInterval = setInterval(sampleWatchTime, 1000);
   }
 
-  function stopAllTracking() {
-    stopDisplayLoop();
+  function stopTimeTracking() {
     if (timeTrackingInterval) {
       clearInterval(timeTrackingInterval);
       timeTrackingInterval = null;
     }
+  }
+
+  function stopAllTracking() {
+    stopDisplayLoop();
+    stopTimeTracking();
   }
 
   // Attach video listeners — AbortController guarantees the previous video's
@@ -1116,6 +1144,16 @@ if (typeof document !== 'undefined') {
     target instanceof Element &&
     (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
 
+  // A letter from a non-Latin script (Cyrillic, Greek, Hebrew…). On those
+  // layouts e.key never equals 'g', '[' or ']', so the physical key decides.
+  // Latin layouts keep following the character: a German ü sits on the
+  // BracketLeft key and must not set a point.
+  const isNonLatinLetter = (key) =>
+    typeof key === 'string' && /^\p{L}$/u.test(key) && !/\p{Script=Latin}/u.test(key);
+
+  const shortcutIs = (e, char, code) =>
+    e.key === char || (e.code === code && isNonLatinLetter(e.key));
+
   document.addEventListener('keydown', (e) => {
     if (e.ctrlKey || e.metaKey) return;
     if (isTypingTarget(e.target)) return;
@@ -1125,13 +1163,14 @@ if (typeof document !== 'undefined') {
 
     // Alt is not excluded here: on several keyboard layouts the bracket keys
     // are only reachable via AltGr, which reports altKey.
-    if (showIntervalTimer && (e.key === '[' || e.key === ']')) {
+    const isStart = shortcutIs(e, '[', 'BracketLeft');
+    if (showIntervalTimer && (isStart || shortcutIs(e, ']', 'BracketRight'))) {
       e.preventDefault();
-      setIntervalPoint(e.key === '[' ? 'start' : 'end');
+      setIntervalPoint(isStart ? 'start' : 'end');
       return;
     }
 
-    if (showJumpBtn && !e.altKey && (e.key === 'g' || e.key === 'G')) {
+    if (showJumpBtn && !e.altKey && (e.key === 'G' || shortcutIs(e, 'g', 'KeyG'))) {
       e.preventDefault();
       openJumpInput();
     }

@@ -72,6 +72,9 @@ if (typeof chrome !== 'undefined') {
     }
   });
 
+  const isExtensionPage = (sender) =>
+    typeof sender.url === 'string' && sender.url.startsWith(chrome.runtime.getURL(''));
+
   // Handle messages from content script
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'UPDATE_WATCH_TIME') {
@@ -86,6 +89,28 @@ if (typeof chrome !== 'undefined') {
         .then(() => sendResponse({ success: true }))
         .catch((error) => {
           console.error('Error updating watch time:', error);
+          sendResponse({ success: false });
+        });
+
+      return true;
+    }
+
+    // Statistics reset from the popup. It goes through the same write chain as
+    // the watch-time updates: resetting from the popup directly let an update
+    // that had already read the old total write it back over the reset.
+    // Only our own extension pages may ask: a content script reports the
+    // YouTube page as its sender.url and has no business wiping the history.
+    // (Not sender.tab — popup.html opened in a tab has one too.)
+    if (message.type === 'RESET_STATS') {
+      if (!isExtensionPage(sender)) {
+        sendResponse({ success: false });
+        return false;
+      }
+
+      resetStats()
+        .then(() => sendResponse({ success: true }))
+        .catch((error) => {
+          console.error('Error resetting stats:', error);
           sendResponse({ success: false });
         });
 
@@ -124,6 +149,12 @@ if (typeof chrome !== 'undefined') {
         throw new Error('Failed to update watch time: ' + error.message);
       }
     });
+  }
+
+  // Only the statistics keys are written, so the settings keys never change and
+  // open YouTube tabs never see a transient "every button enabled" state.
+  function resetStats() {
+    return enqueueWrite(() => chrome.storage.local.set({ totalWatchTime: 0, dailyStats: {} }));
   }
 
 } // end browser-only block

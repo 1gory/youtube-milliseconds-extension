@@ -13,29 +13,9 @@
  * These tests drive the real content.js against a fake player DOM.
  */
 
-const { readFileSync } = require('fs');
-const path = require('path');
-
-const CONTENT_PATH = path.join(__dirname, '..', 'js', 'content.js');
-const CONTENT = readFileSync(CONTENT_PATH, 'utf8');
-
-const CHROME_BOTTOM_HTML = `
-    <div class="ytp-chrome-bottom">
-      <div class="ytp-progress-bar"></div>
-      <div class="ytp-chrome-controls">
-        <div class="ytp-time-display">
-          <span class="ytp-time-current">0:00</span>
-          <span class="ytp-time-separator"> / </span>
-          <span class="ytp-time-duration">10:00</span>
-        </div>
-      </div>
-    </div>`;
-
-const PLAYER_HTML = `
-  <div id="movie_player" class="html5-video-player">
-    <div class="html5-video-container"><video></video></div>
-    ${CHROME_BOTTOM_HTML}
-  </div>`;
+const {
+  CHROME_BOTTOM_HTML, BUTTON_SELECTORS, q, flushFrames, bootExtension, teardown,
+} = require('./helpers/contentHarness');
 
 // The <video> exists but YouTube has not rendered the control bar yet — the
 // state that made the buttons never appear at all.
@@ -54,79 +34,11 @@ const CONTROL_BAR_HTML = `
     <span class="ytp-time-duration">10:00</span>
   </div>`;
 
-const BUTTON_SELECTORS = [
-  '.ytp-copy-time-btn',
-  '.ytp-ms-toggle-btn',
-  '.ytp-jump-btn',
-  '.ytp-interval-btn-a',
-  '.ytp-interval-btn-b',
-];
-
-// Give the <video> element a clock we can drive; jsdom does not play media.
-function rigVideo(el) {
-  let time = 0;
-  let paused = false;
-  Object.defineProperty(el, 'currentTime', {
-    get: () => time, set: (v) => { time = v; }, configurable: true,
-  });
-  Object.defineProperty(el, 'duration', { get: () => 600, configurable: true });
-  Object.defineProperty(el, 'playbackRate', { get: () => 1, configurable: true });
-  Object.defineProperty(el, 'paused', {
-    get: () => paused, set: (v) => { paused = v; }, configurable: true,
-  });
-  return el;
-}
-
-let rafQueue;
-
-// Deterministic frame pump — the display loop runs on requestAnimationFrame.
-function flushFrames(n) {
-  for (let i = 0; i < n; i++) {
-    const batch = rafQueue;
-    rafQueue = [];
-    batch.forEach((f) => f.cb(0));
-  }
-}
-
 function advanceVideo(video, seconds) {
   video.currentTime += seconds;
 }
 
-const q = (sel) => document.querySelector(sel);
 const liveButtons = () => BUTTON_SELECTORS.filter((sel) => q(sel)).length;
-
-async function bootExtension(html = PLAYER_HTML) {
-  document.body.innerHTML = html;
-  rigVideo(q('video'));
-
-  let rafId = 0;
-  rafQueue = [];
-  global.requestAnimationFrame = (cb) => { rafQueue.push({ id: ++rafId, cb }); return rafId; };
-  global.cancelAnimationFrame = (id) => { rafQueue = rafQueue.filter((f) => f.id !== id); };
-
-  const store = {};
-  global.chrome = {
-    runtime: { id: 'test-extension', sendMessage: () => Promise.resolve() },
-    storage: {
-      local: {
-        get: (keys) => {
-          const out = {};
-          (Array.isArray(keys) ? keys : [keys]).forEach((k) => { if (k in store) out[k] = store[k]; });
-          return Promise.resolve(out);
-        },
-        set: (obj) => { Object.assign(store, obj); return Promise.resolve(); },
-      },
-      onChanged: { addListener: () => {} },
-    },
-  };
-
-  // eval rather than require: content.js installs itself into whatever window
-  // it is evaluated in, and each test needs a fresh copy of that state.
-  window.eval(CONTENT);
-
-  // 100 ms player poll + the awaited settings promise
-  await jest.advanceTimersByTimeAsync(300);
-}
 
 describe('recovery after YouTube re-renders the control bar', () => {
   beforeEach(() => {
@@ -135,8 +47,8 @@ describe('recovery after YouTube re-renders the control bar', () => {
   });
 
   afterEach(() => {
+    teardown();
     jest.useRealTimers();
-    document.body.innerHTML = '';
   });
 
   test('readout keeps advancing after the control bar is replaced', async () => {
@@ -191,8 +103,8 @@ describe('recovery when the control bar renders after the video', () => {
   });
 
   afterEach(() => {
+    teardown();
     jest.useRealTimers();
-    document.body.innerHTML = '';
   });
 
   // updateDisplayMode() retries for 5 s, so the readout used to recover on its

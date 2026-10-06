@@ -115,27 +115,4 @@ describe('parseTimestamp — comma decimal separator (replace-all regression)', 
   });
 });
 
-describe('applyJump clamp semantics (pure logic)', () => {
-  // Mirrors the clamp performed inside applyJump():
-  //   clamped = Math.max(0, Math.min(seconds, duration))
-  function clamp(seconds, duration) {
-    return Math.max(0, Math.min(seconds, duration));
-  }
-
-  test('negative input clamps to 0', () => {
-    expect(clamp(-5, 100)).toBe(0);
-  });
-
-  test('input greater than duration clamps to duration', () => {
-    expect(clamp(150, 100)).toBe(100);
-  });
-
-  test('input within range is unchanged', () => {
-    expect(clamp(42.5, 100)).toBe(42.5);
-  });
-
-  test('boundary values are preserved', () => {
-    expect(clamp(0, 100)).toBe(0);
-    expect(clamp(100, 100)).toBe(100);
-  });
-});
+// Clamping to [0, duration] is exercised end-to-end in contentControls.test.js.

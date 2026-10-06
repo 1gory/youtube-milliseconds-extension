@@ -30,10 +30,15 @@ drift apart easily, and nothing breaks loudly when they do.
 
 ### 2. Pre-flight
 - [ ] All feature work merged into `main`
-- [ ] `npm test` — all tests pass
-- [ ] Manually loaded the extension (`chrome://extensions` → Reload), opened a
-      YouTube video, exercised every player-bar control: ms toggle, copy,
-      jump-to-timestamp (`G`), interval A/B (`[` / `]`), and the popup stats.
+All three layers in [TESTING.md](TESTING.md):
+- [ ] Layer 1 — `npm test` — all tests pass
+- [ ] Layer 2 — `node e2e/offline.js` passes on the working tree (and on
+      `git archive HEAD` as a baseline, so a failure is known to be new)
+- [ ] Layer 3 — build the ZIP (step 10), load it unpacked in your own Chrome
+      with the store build turned off, and have the agent run
+      `e2e/live-check.js` on real YouTube: `passed === total`, `adBreaks === 0`
+- [ ] By hand, what layer 3 cannot reach: the copy button and the popup
+      (stats, settings toggles, Reset Statistics)
 - [ ] No stray `console.log` left in `js/*.js`
 
 ### 3. Store listing copy
@@ -87,7 +92,10 @@ push to `main` used to fail a Jekyll build against the deleted `docs/`.
 
 ### 8. Tests
 - [ ] If new logic was added (timestamp parser, interval math, version
-      comparator, etc.), add tests under `tests/`
+      comparator, etc.), add tests under `tests/` — against the shipped file,
+      failing on the previous release (TESTING.md, layer 1)
+- [ ] If the fix is about something YouTube does (a readout mode, a re-render,
+      an ad), teach the fake page in `e2e/offline.js` to do it too
 - [ ] `npm test` — still green
 
 ### 9. Commit + tag
@@ -229,4 +237,24 @@ add to it after each release.
 - **1.6.2** — a green test proves nothing until it has been run against the code
   *without* the fix. Each new case here was replayed against 1.6.1 and against
   the first cut of the fix; that is what surfaced both entries above. Lesson:
-  step 8 means "add a test that fails on the old code", not "add a test".
+  step 8 means "add a test that fails on the old code", not "add a test".- **1.6.3** — four suites (`msToggle`, the interval Δ helper, the jump clamp,
+  the `dailyStats` arithmetic) re-implemented the code under test inside the
+  test file and asserted against that copy. `msToggle.test.js` kept passing for
+  a storage read-then-flip handler that `content.js` had stopped using two
+  releases earlier. Lesson: a test must `require` or `eval` the shipped file;
+  a helper defined in the test is the thing being tested, not the extension.
+  `tests/helpers/contentHarness.js` now boots the real `content.js` in jsdom.
+- **1.6.3** — the first cut of `RESET_STATS` accepted only senders without
+  `sender.tab`. Every jsdom/unit test passed; loading the unpacked extension in
+  real Chromium showed the reset silently refused, because `popup.html` opened
+  in a tab has one. Lesson: anything that depends on what Chrome puts into
+  `sender`, `chrome.storage` events or the extension lifecycle needs one run
+  in a real browser before release, not only the mocked suite.
+- **1.6.3** — clicking the time readout puts YouTube into "time remaining"
+  mode, written into the same `.ytp-time-current` node as `-10:05`. Nothing in
+  the extension knew the mode existed: with milliseconds off the 4 Hz loop wrote
+  the elapsed time over it, so the readout flickered between `-10:05` and
+  `0:30`; with milliseconds on the mode was silently overridden. A user found
+  it by accident while toggling buttons in the popup. Lesson: before writing
+  into a node YouTube owns, check what else YouTube writes there — and the
+  offline browser check now emulates this toggle.

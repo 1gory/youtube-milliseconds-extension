@@ -1,25 +1,7 @@
 const { getLocalDateString } = require('../js/background');
-const { formatWatchTime } = require('../js/popup');
+const popup = require('../js/popup');
 
-// Re-implement helpers locally for isolated testing
-// (same logic as popup.js — tested here so popup.js doesn't need extra exports)
-function getLocalDateStringLocal(date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-
-function formatShortTime(totalSeconds) {
-  const secs = Math.floor(totalSeconds);
-  const hours = Math.floor(secs / 3600);
-  const minutes = Math.floor((secs % 3600) / 60);
-  const seconds = secs % 60;
-
-  if (hours > 0) return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
-  if (minutes > 0) return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
-  return `${seconds}s`;
-}
+const { formatShortTime } = popup;
 
 describe('getLocalDateString (background.js)', () => {
   test('formats a known date correctly', () => {
@@ -37,9 +19,12 @@ describe('getLocalDateString (background.js)', () => {
     expect(getLocalDateString(d)).toBe('2026-12-01');
   });
 
-  test('is consistent with popup helper', () => {
-    const d = new Date(2026, 0, 9); // Jan 9
-    expect(getLocalDateString(d)).toBe(getLocalDateStringLocal(d));
+  // background.js writes dailyStats keys, popup.js reads them: the two copies
+  // of this helper must agree or the popup shows empty days.
+  test('agrees with the popup copy that reads the keys back', () => {
+    for (const d of [new Date(2026, 0, 9), new Date(2026, 11, 31, 23, 59), new Date(2024, 1, 29, 0, 0)]) {
+      expect(popup.getLocalDateString(d)).toBe(getLocalDateString(d));
+    }
   });
 });
 
@@ -77,25 +62,5 @@ describe('formatShortTime', () => {
   });
 });
 
-describe('dailyStats accumulation logic', () => {
-  test('new day initializes from zero', () => {
-    const dailyStats = {};
-    const today = '2026-04-14';
-    dailyStats[today] = (dailyStats[today] || 0) + 10;
-    expect(dailyStats[today]).toBe(10);
-  });
-
-  test('existing day accumulates correctly', () => {
-    const dailyStats = { '2026-04-14': 100 };
-    dailyStats['2026-04-14'] = (dailyStats['2026-04-14'] || 0) + 50;
-    expect(dailyStats['2026-04-14']).toBe(150);
-  });
-
-  test('different days are independent', () => {
-    const dailyStats = {};
-    dailyStats['2026-04-13'] = (dailyStats['2026-04-13'] || 0) + 300;
-    dailyStats['2026-04-14'] = (dailyStats['2026-04-14'] || 0) + 600;
-    expect(dailyStats['2026-04-13']).toBe(300);
-    expect(dailyStats['2026-04-14']).toBe(600);
-  });
-});
+// Accumulation into dailyStats is covered against the real service worker in
+// backgroundMessages.test.js.

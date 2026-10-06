@@ -390,20 +390,12 @@ if (typeof document !== 'undefined') {
 
     disarmReset();
     try {
-      const currentSettings = await chrome.storage.local.get([
-        'showMilliseconds', 'showIntervalTimer',
-        'showCopyBtn', 'showMsToggleBtn', 'showJumpBtn',
-      ]);
-      await chrome.storage.local.clear();
-      await chrome.storage.local.set({
-        totalWatchTime: 0,
-        dailyStats: {},
-        showMilliseconds: currentSettings.showMilliseconds !== false,
-        showIntervalTimer: currentSettings.showIntervalTimer !== false,
-        showCopyBtn: currentSettings.showCopyBtn !== false,
-        showMsToggleBtn: currentSettings.showMsToggleBtn !== false,
-        showJumpBtn: currentSettings.showJumpBtn !== false,
-      });
+      // The service worker owns every statistics write. Resetting from here
+      // raced its write chain, and the old clear()-then-restore briefly deleted
+      // the settings keys, which every open YouTube tab read as "show every
+      // button" and rebuilt its control bar twice.
+      const response = await chrome.runtime.sendMessage({ type: 'RESET_STATS' });
+      if (!response?.success) throw new Error('reset refused by the service worker');
       location.reload();
     } catch (error) {
       console.error('Error resetting stats:', error);
@@ -419,5 +411,5 @@ if (typeof document !== 'undefined') {
 
 // Export for testing in Node.js environment
 if (typeof module !== 'undefined') {
-  module.exports = { formatWatchTime, calcAvg, getLast7Days, getLocalDateString };
+  module.exports = { formatWatchTime, formatShortTime, calcAvg, getLast7Days, getLocalDateString };
 }

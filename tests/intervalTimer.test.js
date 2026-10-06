@@ -1,42 +1,7 @@
 const { formatVideoTime } = require('../js/content');
 
-// Helper: compute Δ the same way the extension does
-function computeDelta(startTime, endTime) {
-  return Math.abs(endTime - startTime);
-}
-
-describe('interval delta calculation', () => {
-  test('normal case: A < B', () => {
-    const delta = computeDelta(10.5, 20.75);
-    expect(delta).toBeCloseTo(10.25, 5);
-  });
-
-  test('reversed case: B < A gives same positive Δ', () => {
-    const delta = computeDelta(20.75, 10.5);
-    expect(delta).toBeCloseTo(10.25, 5);
-  });
-
-  test('zero interval: A === B', () => {
-    const delta = computeDelta(5.123, 5.123);
-    expect(delta).toBe(0);
-  });
-
-  test('delta formatted correctly (sub-minute)', () => {
-    const delta = computeDelta(83.456, 84.789);
-    expect(formatVideoTime(delta, true)).toBe('0:01.333');
-  });
-
-  test('delta formatted correctly (cross-minute boundary)', () => {
-    // 1:23.456 → 2:34.789 = 1:11.333
-    const delta = computeDelta(83.456, 154.789);
-    expect(formatVideoTime(delta, true)).toBe('1:11.333');
-  });
-
-  test('delta formatted correctly when B < A (reversed)', () => {
-    const delta = computeDelta(154.789, 83.456);
-    expect(formatVideoTime(delta, true)).toBe('1:11.333');
-  });
-});
+// The A/B flow itself (points, Δ, markers) is driven through the real
+// content.js in contentControls.test.js; this suite covers Δ formatting.
 
 describe('formatVideoTime with milliseconds (delta values)', () => {
   test('zero seconds', () => {
