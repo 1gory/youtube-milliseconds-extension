@@ -1,7 +1,7 @@
 # Testing
 
 Three layers. Each one catches things the layer before it cannot, and every
-release runs all three (RELEASE.md, steps 2 and 8).
+release runs all three (RELEASE.md, step 3).
 
 | Layer | What runs | Where | Catches |
 |-------|-----------|-------|---------|
@@ -93,7 +93,7 @@ open.
 
 ### Each release
 
-1. Build the ZIP and unpack it (RELEASE.md step 10):
+1. Build the ZIP and unpack it (RELEASE.md step 9):
    `unzip youtube-milliseconds-vX.Y.Z.zip -d youtube-milliseconds-vX.Y.Z`.
 2. **User:** `chrome://extensions` → Developer mode → *Load unpacked* → that
    folder. **Turn the store build off**, or every button is injected twice.

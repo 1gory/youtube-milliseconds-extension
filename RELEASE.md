@@ -1,124 +1,60 @@
-# Release checklist
+# Release — YouTube Milliseconds Timer
 
-Use this every time you publish a new version to the Chrome Web Store.
-It exists because the moving parts (manifest, package.json, ZIP, store
-listing, screenshots, GitHub release, **and the GitHub Pages landing page**)
-drift apart easily, and nothing breaks loudly when they do.
+The common runbook is [`../RELEASE.md`](../RELEASE.md) (the shared
+`~/Sites/extensions/` workspace, outside this repo). Walk it step by step; this
+file holds only what is specific to this extension. Section numbers match the
+common steps.
 
-## Versioning
-
-`manifest.json` is the source of truth for the shipped version.
-`package.json` must carry the **same** number.
-
-| Change | Bump |
-|--------|------|
-| Bug fix, copy tweak, no behaviour change | PATCH (1.5.1 → 1.5.2) |
-| New user-visible feature, backwards compatible | MINOR (1.5.1 → 1.6.0) |
-| Breaking change / major rework | MAJOR (1.5.1 → 2.0.0) |
-
-**Rule: both numbers must be identical.** Step 1 enforces this.
+| | |
+|---|---|
+| Version lives in | `manifest.json`, `package.json`, `package-lock.json` (two fields) |
+| Version history | `js/changelog.js` |
+| Store listing | `store-listing.md` · ID `bchlendkhiidadpakkfgnpeklmifffcp` |
+| Landing | `https://ipershin.me/youtube-milliseconds-timer/` (+ `/privacy/`) |
+| GitHub | `1gory/youtube-milliseconds-extension` · Pages **off**, keep it off |
+| ZIP | `youtube-milliseconds-vX.Y.Z.zip` |
 
 ---
 
-## Step-by-step release checklist
+### 1. Version
+```bash
+grep -m3 '"version"' manifest.json package.json package-lock.json
+```
 
-### 1. Versions match
-- [ ] Bump `manifest.json` → `"version"`
-- [ ] Bump `package.json` → `"version"` to the **same** value
-- [ ] Bump `package-lock.json` → both top-level `"version"` fields (lines 3 and 9)
-- [ ] `grep -m3 '"version"' manifest.json package.json package-lock.json` — confirm they agree
-- [ ] Add the new version at the top of `js/changelog.js` — what changed *for
-      the user*, one to three lines, plain words (the popup shows it under the
-      footer version link). `tests/changelog.test.js` fails until it matches
-      `manifest.json`
+### 2. Release notes
+- [ ] Entry at the top of `CHANGELOG` in `js/changelog.js` (`version`,
+      `date: 'YYYY-MM'`, `changes`). The popup shows it under the footer
+      version link. `tests/changelog.test.js` fails until it matches
+      `manifest.json`.
 
-### 2. Pre-flight
-- [ ] All feature work merged into `main`
-All three layers in [TESTING.md](TESTING.md):
-- [ ] Layer 1 — `npm test` — all tests pass
-- [ ] Layer 2 — `node e2e/offline.js` passes on the working tree (and on
-      `git archive HEAD` as a baseline, so a failure is known to be new)
-- [ ] Layer 3 — build the ZIP (step 10), load it unpacked in your own Chrome
-      with the store build turned off, and have the agent run
-      `e2e/live-check.js` on real YouTube: `passed === total`, `adBreaks === 0`
+### 3. Checks
+All three layers from [TESTING.md](TESTING.md):
+- [ ] Layer 1 — `npm test`.
+- [ ] Layer 2 — `node e2e/offline.js` on the working tree (and on
+      `git archive HEAD` as a baseline, so a failure is known to be new).
+- [ ] Layer 3 — build the ZIP (step 9), load it unpacked with the store build
+      turned off, and have the agent run `e2e/live-check.js` on real YouTube:
+      `passed === total`, `adBreaks === 0`.
 - [ ] By hand, what layer 3 cannot reach: the copy button and the popup
-      (stats, settings toggles, Reset Statistics)
-- [ ] No stray `console.log` left in `js/*.js`
-
-### 3. Store listing copy
-- [ ] Re-read `store-listing.md`. If a user-visible feature was added,
-      changed, or removed, update the **Full description** and the
-      **Summary** (≤ 132 chars) to match.
-- [ ] If you added a new permission, update the **Privacy tab** justifications.
-- [ ] Re-read the **Single purpose** line — does it still match?
-
-### 4. Screenshots (Chrome Web Store)
-A feature you add is often visible in *more than one* screenshot. Re-audit
-every slot, not only the one you obviously changed.
-
-For every screenshot in `screenshots/`:
-- [ ] Open `screenshots/N.jpg`, compare against the current UI in YouTube.
-      If anything in it is now stale (missing button, old timestamp format),
-      re-shoot it.
-- [ ] Replace the file, keep the same file name (README and store listing
-      reference them by name).
-
-### 5. README
-- [ ] Search `README.md` for every mention of a feature this release touches.
-      Update copy and the screenshot section.
-- [ ] Update the feature list and any "version 1.x adds…" line if present.
-- [ ] If you do not update README in the same PR, open a follow-up and link
-      it from the release notes — do not silently skip.
-
-### 6. Landing page (ipershin.me)
-The landing and privacy pages no longer live in this repo — `docs/` was removed
-in 8ddfc33 and the canonical pages moved to
-`https://ipershin.me/youtube-milliseconds-timer/`. They live in a different
-repo entirely, so nothing here breaks when they go stale — same drift trap as
-before, just further away.
-
-GitHub Pages for this repo is **off**. Do not switch it back on: the old
-`1gory.github.io/youtube-milliseconds-extension/` URLs are retired and every
-push to `main` used to fail a Jekyll build against the deleted `docs/`.
-
-- [ ] Audit the **feature list** and the **tagline** on
-      `https://ipershin.me/youtube-milliseconds-timer/` against the current
-      `store-listing.md` — every user-visible feature this release touched
-      (jump-to-timestamp, interval A→B, toolbar customization, stats…) must be
-      reflected.
-- [ ] If the privacy policy text changed, mirror it at
-      `https://ipershin.me/youtube-milliseconds-timer/privacy/`.
-- [ ] Confirm `README.md` still points at both URLs (not the dead github.io ones).
-
-### 7. ai-tasks/
-- [ ] If this release implements or closes anything tracked in `ai-tasks/`,
-      mark it shipped or remove the file, so future-you sees only open work.
-
-### 8. Tests
-- [ ] If new logic was added (timestamp parser, interval math, version
-      comparator, etc.), add tests under `tests/` — against the shipped file,
-      failing on the previous release (TESTING.md, layer 1)
+      (stats, settings toggles, Reset Statistics).
 - [ ] If the fix is about something YouTube does (a readout mode, a re-render,
-      an ad), teach the fake page in `e2e/offline.js` to do it too
-- [ ] `npm test` — still green
+      an ad), teach the fake page in `e2e/offline.js` to do it too.
+- [ ] Every player lookup goes through `getPlayerRoot()` — no bare
+      `querySelector('video')`.
+- [ ] No stray `console.log` in `js/*.js`.
 
-### 9. Commit + tag
-- [ ] `git add` only the files that should ship (see *Packaging* below).
-      Never `git add -A` — unpacked build folders and scratch files live in the
-      repo root.
-- [ ] Commit message: `Release X.Y.Z: <one-line summary>`
-- [ ] `git fetch --tags` **before** reasoning about which tags exist. Local
-      `git tag -l` does not show tags created on the remote (e.g. by publishing
-      a GitHub Release from the web UI).
-- [ ] Tag: `git tag vX.Y.Z`
-- [ ] Push: `git push && git push --tags`
-- [ ] `gh run list --limit 3` — confirm the push did not turn a repo workflow
-      red. A failing build mail after release day is almost always something
-      that broke earlier and only now got retriggered.
+### 5. Screenshots
+- [ ] `screenshots/N.jpg` — compare each against the current UI on YouTube.
+      `screenshots/3.jpg` documents the exact control-bar button order.
 
-### 10. Build ZIP
-Run from the repo root. The ZIP must contain **only** the files the extension
-needs at runtime — no `node_modules/`, `tests/`, screenshots, or markdown.
+### 6. README and tasks
+- [ ] `README.md` still points at the ipershin.me landing and privacy URLs, not
+      the retired `github.io` ones.
+- [ ] `ai-tasks/` — mark shipped items or remove them.
+
+### 9. Build ZIP
+Only the runtime files — no `node_modules/`, `tests/`, `e2e/`, screenshots,
+markdown, or the unpacked `youtube-milliseconds-v*/` folders in the repo root.
 
 ```bash
 VERSION=$(grep '"version"' manifest.json | head -1 | sed 's/.*"\([0-9.]*\)".*/\1/')
@@ -132,132 +68,45 @@ zip -r youtube-milliseconds-v${VERSION}.zip \
   js/popup.js \
   js/changelog.js \
   icons/
-```
-
-Verify the contents:
-```bash
 unzip -l youtube-milliseconds-v${VERSION}.zip
 ```
 
-**Must NOT be inside:** `node_modules/`, `package.json`, `package-lock.json`,
-`tests/`, `screenshots/`, `docs/`, `.git/`, `.idea/`, `.claude/`, any `*.md`,
-`.DS_Store`, `ai-tasks/`.
+A new file under `js/` that the extension loads must be added to this list.
 
-### 11. Chrome Web Store dashboard
-- [ ] Upload the ZIP under "Package".
-- [ ] Replace **every** stale screenshot in the listing (re-audit per step 4).
-- [ ] Update the description text if `store-listing.md` changed.
-- [ ] Confirm Privacy practices if CWS asks (same answers as last time unless
-      permissions changed).
-- [ ] Hit **Submit for review**.
-
-### 12. GitHub Release
-The git tag is not enough — wrap it in a GitHub Release so users (and
-changelog aggregators) can see it.
-
-- [ ] Open `https://github.com/1gory/youtube-milliseconds-extension/releases/new`.
-- [ ] Choose the existing tag `vX.Y.Z` (do not create a new one).
-- [ ] Title: `vX.Y.Z — <one-line summary>`.
-- [ ] Body: highlights / under the hood / install, based on the previous
-      release as a template.
-- [ ] Attach `youtube-milliseconds-vX.Y.Z.zip` so people can sideload without
-      waiting for CWS review.
-- [ ] Tick **Set as the latest release**. Leave pre-release unchecked.
-- [ ] Publish.
-
-### 13. After publish
-- [ ] Wait for the email confirming the CWS update is live (a few hours to a
-      couple of days).
-- [ ] Open the listing URL and verify the version number, screenshots, and
-      description match expectations.
-- [ ] Install the live version (not your unpacked dev build) and smoke-test
-      the player controls on a real video.
-- [ ] Delete the local ZIP (`rm youtube-milliseconds-v*.zip`) so it does not
-      drift out of sync next release.
+### 12. After publish
+- [ ] Smoke-test the player controls on a real video with the live version.
+- [ ] `rm youtube-milliseconds-v*.zip`
 
 ---
 
-## Things we forgot before — do not forget again
+## Project lessons
 
-A running log of mistakes from past releases. Read this before each release,
-add to it after each release.
+Shared lessons are in `../RELEASE.md`. These are about this codebase.
 
-- **pre-1.5.x** — the GitHub Pages landing page (`docs/index.html`) was never
-  updated after the early releases: it advertised only timestamps, copy,
-  interval A→B, and stats, and never mentioned jump-to-timestamp (`G`) or the
-  per-button toolbar customization. Lesson: step 6 now audits `docs/` against
-  `store-listing.md` every release.
-- **1.5.1** — `manifest.json` shipped at 1.5.1 while `package.json` was still
-  at 1.5.0. Lesson: step 1 makes the two-number match the very first thing.
-- **1.5.2 → 1.6.0** — removing `docs/` (8ddfc33) left the README pointing at a
-  deleted badge image and at two dead `github.io` URLs, and left step 6 of this
-  checklist describing a folder that no longer exists. Lesson: when a directory
-  is deleted, grep the repo for its path *and* re-read this file — the checklist
-  itself is one of the things that drifts.
-- **1.5.2 → 1.6.0** — `package-lock.json` had been stuck at 1.2.1 for six
-  releases because step 1 only mentions `manifest.json` and `package.json`.
-  It does not ship in the ZIP, so nothing ever complained.
-- **1.6.0** — deleting `docs/` did not disable GitHub Pages. The setting stayed
-  on `main` / `/docs`, so every push to `main` ran a Jekyll build that failed
-  with `No such file or directory - /github/workspace/docs`. It broke on
-  31 May and stayed silent until the next push (release day, two months later),
-  which then looked like the release had broken CI. Lesson: when you delete a
-  directory something *outside the repo* is configured to read, turn that
-  consumer off in the same change — and add step 9's `gh run list` check so the
-  breakage surfaces on the day it happens.
-- **1.6.1** — `document.querySelector('video')` had been the way the content
-  script found "the" player since the first release. YouTube keeps hover-preview
-  `<video>` elements mounted on the home feed, search results and channel pages,
-  so the extension attached to whichever one came first in document order:
-  preview autoplay was counted as watch time, and the control-bar buttons were
-  injected into the preview player. Nothing errored, the numbers were just
-  quietly wrong. Lesson: every player lookup goes through `getPlayerRoot()` —
-  grep for a bare `querySelector('video')` before shipping.
-- **1.6.1** — reordering the injected control-bar buttons is a *screenshot*
-  change, not a code change. `screenshots/3.jpg` documents the exact icon
-  sequence, so the reorder was reverted rather than shipped with a stale asset.
-  Lesson: step 4 applies to button order, not only to added features.
-- **1.6.0** — claimed the `v1.5.2` tag did not exist, based on `git tag -l`
-  without fetching. The tag was on the remote all along (GitHub created it when
-  the v1.5.2 Release was published). Lesson: `git fetch --tags` first, now in
-  step 9.
-- **1.6.2** — the first cut of the control-bar watchdog reset `displayModeRetries`
-  on every tick, which left `MAX_DISPLAY_MODE_RETRIES` unable to ever bite: a
-  control bar that never came back turned into a permanent 10 Hz DOM poll
-  (measured 164 `document.querySelector` calls per 10 s against a healthy 10).
-  A fix for "the player freezes" that ships the very lag the reviews complain
-  about. Lesson: a watchdog must not reset a budget it does not own, and any
-  recovery loop needs its own ceiling — `tests/controlBarRecovery.test.js` now
-  counts DOM lookups to keep this honest.
-- **1.6.2** — `updateDisplayMode()` had a 5 s retry chain but the button setups
-  (`setupCopyButton`, `setupJumpControl`, `setupIntervalControls`) had none: they
-  bail silently when the anchor is missing and nothing ever called them again.
-  If YouTube rendered the control bar later than the `<video>` element, the
-  timestamp recovered on its own and the buttons were gone for the whole session
-  — which is why it went unnoticed for six releases. Lesson: when one code path
-  gets a retry because the DOM is late, check every sibling path that reads the
-  same DOM.
-- **1.6.2** — a green test proves nothing until it has been run against the code
-  *without* the fix. Each new case here was replayed against 1.6.1 and against
-  the first cut of the fix; that is what surfaced both entries above. Lesson:
-  step 8 means "add a test that fails on the old code", not "add a test".- **1.6.3** — four suites (`msToggle`, the interval Δ helper, the jump clamp,
-  the `dailyStats` arithmetic) re-implemented the code under test inside the
-  test file and asserted against that copy. `msToggle.test.js` kept passing for
-  a storage read-then-flip handler that `content.js` had stopped using two
-  releases earlier. Lesson: a test must `require` or `eval` the shipped file;
-  a helper defined in the test is the thing being tested, not the extension.
-  `tests/helpers/contentHarness.js` now boots the real `content.js` in jsdom.
-- **1.6.3** — the first cut of `RESET_STATS` accepted only senders without
-  `sender.tab`. Every jsdom/unit test passed; loading the unpacked extension in
-  real Chromium showed the reset silently refused, because `popup.html` opened
-  in a tab has one. Lesson: anything that depends on what Chrome puts into
-  `sender`, `chrome.storage` events or the extension lifecycle needs one run
-  in a real browser before release, not only the mocked suite.
-- **1.6.3** — clicking the time readout puts YouTube into "time remaining"
-  mode, written into the same `.ytp-time-current` node as `-10:05`. Nothing in
-  the extension knew the mode existed: with milliseconds off the 4 Hz loop wrote
-  the elapsed time over it, so the readout flickered between `-10:05` and
-  `0:30`; with milliseconds on the mode was silently overridden. A user found
-  it by accident while toggling buttons in the popup. Lesson: before writing
-  into a node YouTube owns, check what else YouTube writes there — and the
-  offline browser check now emulates this toggle.
+- **1.6.1** — `document.querySelector('video')` was how the content script found
+  "the" player. YouTube keeps hover-preview `<video>` elements mounted on the
+  home feed, search and channel pages, so preview autoplay counted as watch time
+  and the buttons went into the preview player. Nothing errored. Lesson: every
+  player lookup goes through `getPlayerRoot()`.
+- **1.6.2** — the first cut of the control-bar watchdog reset
+  `displayModeRetries` on every tick, so `MAX_DISPLAY_MODE_RETRIES` never bit: a
+  control bar that never came back became a permanent 10 Hz DOM poll (164
+  `document.querySelector` calls per 10 s against a healthy 10). Lesson: a
+  watchdog must not reset a budget it does not own, and every recovery loop
+  needs its own ceiling — `tests/controlBarRecovery.test.js` counts DOM lookups.
+- **1.6.2** — `updateDisplayMode()` had a 5 s retry chain, the button setups
+  (`setupCopyButton`, `setupJumpControl`, `setupIntervalControls`) had none. If
+  YouTube rendered the control bar after the `<video>`, the buttons were gone
+  for the session — unnoticed for six releases. Lesson: when one code path gets
+  a retry because the DOM is late, check every sibling that reads the same DOM.
+- **1.6.3** — four suites re-implemented the code under test;
+  `msToggle.test.js` kept passing for a handler `content.js` had dropped two
+  releases earlier. `tests/helpers/contentHarness.js` now boots the real
+  `content.js` in jsdom.
+- **1.6.3** — `RESET_STATS` first accepted only senders without `sender.tab`;
+  every jsdom test passed, real Chromium refused it because `popup.html` opened
+  in a tab has one.
+- **1.6.3** — clicking the time readout puts YouTube into "time remaining" mode
+  in the same `.ytp-time-current` node. The 4 Hz loop overwrote it, so the
+  readout flickered. Lesson: before writing into a node YouTube owns, check what
+  else YouTube writes there — the offline check now emulates this toggle.

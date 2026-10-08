@@ -10,7 +10,7 @@ const ROOT = path.join(__dirname, '..');
 const read = (f) => readFileSync(path.join(ROOT, f), 'utf8');
 const MANIFEST = JSON.parse(read('manifest.json'));
 
-// Paths named by the `zip -r … \` command in RELEASE.md step 10.
+// Paths named by the `zip -r … \` command in RELEASE.md step 9.
 function zipList() {
   const release = read('RELEASE.md');
   const cmd = /```bash\n[^`]*?zip -r [^\n]*\\\n([\s\S]*?)```/.exec(release);
